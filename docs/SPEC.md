@@ -4,6 +4,14 @@
 
 MVP 구현 설계는 [`DESIGN.md`](DESIGN.md)에 둔다. 이 문서는 제품 요구사항과 범위를 설명하고, 세부 아키텍처와 API 계약은 설계 문서를 기준으로 한다.
 
+MVP 기술 선택:
+
+- Hosting: Vercel
+- Database: Supabase Postgres
+- Asset storage: Supabase Storage
+- Admin auth: 단일 admin password session
+- Render store: sanitized HTML materialization
+
 ## 개요
 
 Lumenote는 Tolaria로 작성된 Markdown vault를 웹 페이지로 공개할 수 있게 해주는 publishing 서비스다. 사용자는 GitHub에 저장한 vault를 연결하고, Lumenote는 노트의 frontmatter와 링크 구조를 읽어 공개 가능한 페이지로 렌더링한다.

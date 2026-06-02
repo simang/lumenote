@@ -18,7 +18,9 @@
 | Vercel OAuth | MVP 제외 |
 | 사용자 모델 | 단일 admin 사용자 |
 | 공개 URL | MVP는 path-based URL, 이후 subdomain/custom domain |
-| 저장소 | Postgres-compatible DB + object storage |
+| 저장소 | Supabase Postgres + Supabase Storage |
+| Admin auth | 단일 admin password session |
+| Render store | sanitized HTML materialization |
 
 ## 전체 구조
 
@@ -43,9 +45,9 @@ Tolaria vault repository
 - public page route는 DB에 저장된 렌더링 결과를 읽어 응답한다.
 - Markdown parsing/rendering은 request path에서 직접 수행하지 않고 ingestion 단계에서 materialize한다.
 
-### Postgres
+### Supabase Postgres
 
-Postgres는 다음 데이터를 저장한다.
+MVP DB는 Supabase Postgres를 사용한다. Postgres는 다음 데이터를 저장한다.
 
 - site 설정
 - GitHub repository 연결 정보
@@ -55,17 +57,23 @@ Postgres는 다음 데이터를 저장한다.
 - share link
 - ingestion run log
 
-DB provider는 MVP 구현 시점에 Supabase, Neon, Vercel Postgres 중 하나로 선택한다. 앱 코드는 provider-specific API에 강하게 묶지 않고 Postgres SQL/ORM 위주로 둔다.
+앱 코드는 Supabase client에 과하게 묶지 않고 Postgres SQL/ORM 위주로 둔다. 이렇게 하면 나중에 Neon, Vercel Postgres, self-hosted Postgres로 옮기는 비용을 줄일 수 있다.
 
-### Object storage
+### Supabase Storage
 
 private vault의 asset은 브라우저가 GitHub raw URL로 직접 접근할 수 없다. publish된 이미지와 첨부 파일은 Lumenote가 GitHub에서 읽어 object storage에 저장하거나, MVP에서는 authenticated proxy + cache로 제공한다.
 
-초기 권장안:
+MVP asset storage는 Supabase Storage를 사용한다.
 
 1. 이미지 asset은 ingestion 단계에서 object storage에 저장한다.
 2. note HTML에는 Lumenote asset URL을 넣는다.
 3. publish되지 않은 note가 참조하는 asset은 공개하지 않는다.
+
+### Rendered content
+
+MVP에서는 Markdown을 ingestion 단계에서 sanitized HTML로 렌더링하고 `notes.html`에 저장한다. 요청 시점에는 HTML shell, note metadata, link graph, access policy만 조합한다.
+
+AST/JSON document 저장은 MVP 이후로 미룬다. 나중에 block-level rendering, interactive embeds, theme-specific renderer가 필요해지면 `notes.render_ast` 또는 별도 table을 추가한다.
 
 ## URL 설계
 
@@ -110,7 +118,8 @@ MVP admin UI는 제품형 onboarding보다 운영 도구에 가깝게 만든다.
 MVP admin 인증:
 
 - 단일 admin 계정만 지원한다.
-- `ADMIN_EMAIL`과 `ADMIN_PASSWORD_HASH` 또는 provider login을 사용한다.
+- `ADMIN_EMAIL`과 `ADMIN_PASSWORD_HASH` 기반 password session을 사용한다.
+- session cookie는 `HttpOnly`, `Secure`, `SameSite=Lax`로 설정한다.
 - public route와 admin route는 명확히 분리한다.
 
 ## GitHub 연동
@@ -697,10 +706,6 @@ fixtures/vault/frontmatter
 
 ## 남은 결정
 
-- DB provider를 무엇으로 시작할지
-- object storage를 무엇으로 시작할지
-- admin auth를 password session으로 할지 GitHub OAuth로 할지
-- rendered HTML 저장 방식으로 충분한지, AST/JSON document도 함께 저장할지
 - Tolaria note type/resource/project schema를 public page template에 반영할지
 - GitHub Action workflow를 사용자가 복사하게 할지, Lumenote가 파일을 생성해 제공할지
 
