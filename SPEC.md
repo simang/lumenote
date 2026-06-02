@@ -1,5 +1,9 @@
 # Lumenote Spec
 
+## 구현 설계
+
+MVP 구현 설계는 [`docs/DESIGN.md`](docs/DESIGN.md)에 둔다. 이 문서는 제품 요구사항과 범위를 설명하고, 세부 아키텍처와 API 계약은 설계 문서를 기준으로 한다.
+
 ## 개요
 
 Lumenote는 Tolaria로 작성된 Markdown vault를 웹 페이지로 공개할 수 있게 해주는 publishing 서비스다. 사용자는 GitHub에 저장한 vault를 연결하고, Lumenote는 노트의 frontmatter와 링크 구조를 읽어 공개 가능한 페이지로 렌더링한다.
@@ -12,7 +16,7 @@ Lumenote는 Tolaria로 작성된 Markdown vault를 웹 페이지로 공개할 �
 - Markdown, frontmatter, wikilink, backlink, embed를 웹에서 읽기 좋은 문서로 렌더링한다.
 - frontmatter 기반으로 노트별 공개 여부, URL slug, 접근 정책, SEO 설정을 제어한다.
 - public page와 unlisted share link를 모두 지원한다.
-- Vercel을 기본 serving/deployment 플랫폼 후보로 사용한다.
+- Vercel은 Lumenote 앱 자체의 hosting 플랫폼으로 사용한다.
 - 사용자가 별도 빌드 파이프라인을 직접 관리하지 않아도 publish할 수 있게 한다.
 
 ## 비목표
@@ -21,6 +25,7 @@ Lumenote는 Tolaria로 작성된 Markdown vault를 웹 페이지로 공개할 �
 - GitHub repository에 write 권한을 요구하지 않는다.
 - 초기 버전에서 Notion 수준의 블록 편집 경험을 제공하지 않는다.
 - 초기 버전에서 완전한 private team workspace 기능을 제공하지 않는다.
+- 초기 버전에서 사용자별 Vercel OAuth 권한 위임이나 site별 Vercel 배포를 제공하지 않는다.
 - 링크만 가진 접근은 보안상 "unlisted"로 취급한다. 강한 보호가 필요한 경우 별도 인증 정책이 필요하다.
 
 ## 대상 사용자
@@ -44,18 +49,18 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 ### 1. GitHub vault 연결
 
 1. 사용자가 Lumenote에 로그인한다.
-2. GitHub OAuth 또는 GitHub App 설치를 통해 vault repository read 권한을 제공한다.
-3. Lumenote가 repository 목록에서 vault 후보를 보여준다.
-4. 사용자가 vault repository와 branch를 선택한다.
-5. Lumenote가 repository를 clone/fetch하고 Markdown 파일을 인덱싱한다.
+2. GitHub App을 vault repository에 설치한다.
+3. Lumenote admin에서 repository owner, name, branch를 설정한다.
+4. Lumenote가 GitHub App installation token으로 repository tree와 필요한 파일을 읽는다.
+5. 사용자가 full sync를 실행해서 Markdown 파일을 최초 인덱싱한다.
 
 ### 2. 공개 노트 publish
 
 1. 사용자가 Tolaria 노트 frontmatter에 publish 설정을 추가한다.
 2. GitHub에 commit/push한다.
-3. Lumenote가 webhook 또는 polling으로 변경을 감지한다.
-4. 변경된 vault를 다시 인덱싱한다.
-5. publish 대상 노트를 웹 페이지로 렌더링한다.
+3. vault repository의 GitHub Action이 변경된 path 목록을 Lumenote API로 전달한다.
+4. Lumenote가 GitHub App 권한으로 변경된 파일만 읽는다.
+5. 변경된 노트를 다시 인덱싱한다.
 6. public URL 또는 unlisted URL을 생성한다.
 
 ### 3. 공유 링크 생성
@@ -173,13 +178,13 @@ slug 충돌 처리:
 
 ```text
 GitHub Repository
-  -> GitHub App / OAuth
+  -> GitHub Action changed-path trigger
   -> Lumenote API Server
+  -> GitHub App read-only file fetch
   -> Vault Ingestion Worker
   -> Markdown Parser / Indexer
   -> Rendered Page Store
-  -> Web Renderer
-  -> Vercel Deployment or Edge Serving
+  -> Lumenote Web Renderer on Vercel
 ```
 
 ### 주요 컴포넌트
@@ -187,12 +192,13 @@ GitHub Repository
 | 컴포넌트 | 역할 |
 |---|---|
 | API Server | 사용자, repository 연결, site 설정, publish 상태 관리 |
-| GitHub Integration | GitHub App 설치, repo read, webhook 수신 |
-| Ingestion Worker | vault clone/fetch, 변경 파일 감지, 인덱싱 |
+| GitHub Action Notifier | vault push 시 변경 path 목록을 Lumenote API로 전달 |
+| GitHub Integration | GitHub App 설치, repo read, installation token 발급 |
+| Ingestion Worker | 변경 파일 fetch, 인덱싱, materialized store 갱신 |
 | Markdown Parser | frontmatter, Markdown AST, wikilink, asset 분석 |
 | Access Controller | public/unlisted/private/password/allowlist 검사 |
 | Renderer | HTML/React page 렌더링 |
-| Deployment Adapter | Vercel 배포 또는 자체 serving 연결 |
+| Deployment Adapter | MVP 이후 사용자별 Vercel 배포 또는 static export 연결 |
 
 ## 데이터 모델 초안
 
@@ -262,9 +268,11 @@ GitHub Repository
 - Metadata: read-only
 - Webhooks: push event
 
-OAuth token보다 GitHub App이 repository 단위 설치와 권한 제한에 유리하다. Vercel 연동이 필요한 경우에는 사용자의 Vercel account/team 권한을 별도로 받는다.
+OAuth token보다 GitHub App이 repository 단위 설치와 권한 제한에 유리하다. MVP에서는 사용자의 Vercel account/team 권한을 받지 않는다. 사용자별 Vercel 배포가 필요해지면 별도 deployment adapter에서 권한 위임을 다룬다.
 
 ## Vercel 연동 옵션
+
+MVP에서 Vercel은 Lumenote 앱 자체를 배포하는 플랫폼이다. 사용자 vault를 site별 Vercel project로 배포하지 않는다.
 
 ### 옵션 A: Lumenote가 직접 serving
 
@@ -286,30 +294,31 @@ OAuth token보다 GitHub App이 repository 단위 설치와 권한 제한에 유
 - unlisted/private/protected page는 Lumenote edge/API에서 제공한다.
 - MVP 이후 확장 방향으로 적합하다.
 
-MVP는 옵션 A가 가장 단순하다. Vercel은 추후 custom deployment adapter로 붙이는 것이 구현 리스크가 낮다.
+MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment adapter로 붙인다.
 
 ## 보안 고려사항
 
 - GitHub 권한은 read-only로 제한한다.
-- clone된 vault는 site별 격리된 storage에 저장한다.
+- GitHub에서 읽은 raw content는 publish 판단과 렌더링에 필요한 범위로만 저장한다.
+- publish된 asset은 site별 object storage key로 격리한다.
 - unlisted token은 원문 저장하지 않고 hash로 저장한다.
 - password는 bcrypt/argon2로 hash한다.
 - publish되지 않은 노트의 제목, 경로, 링크 정보가 public page에 새지 않도록 필터링한다.
 - asset도 노트와 동일한 visibility 정책을 따른다.
-- webhook payload 검증을 필수로 한다.
+- GitHub Action ingest payload와 향후 webhook payload 검증을 필수로 한다.
 - Markdown HTML injection을 방지하기 위해 sanitizer를 적용한다.
 
 ## MVP 범위
 
 1. GitHub App 기반 repository 연결
-2. Markdown vault clone/fetch
+2. GitHub Action 기반 changed-path trigger
 3. frontmatter `publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
 5. `unlisted` share link 생성
 6. wikilink 기본 변환
 7. 이미지 asset serving
-8. site별 subdomain 또는 path-based URL
-9. webhook 기반 rebuild
+8. path-based URL
+9. admin full sync
 10. 기본 대시보드
 
 ## MVP 이후
@@ -324,6 +333,7 @@ MVP는 옵션 A가 가장 단순하다. Vercel은 추후 custom deployment adapt
 - analytics
 - comment integration
 - Vercel deployment adapter
+- GitHub webhook 기반 managed mode
 - Obsidian/plain Markdown compatibility
 
 ## 오픈 질문
@@ -331,8 +341,7 @@ MVP는 옵션 A가 가장 단순하다. Vercel은 추후 custom deployment adapt
 - Tolaria vault의 canonical schema와 note type을 얼마나 강하게 웹에 반영할 것인가?
 - publish된 노트만 별도 materialized store에 저장할 것인가, 매 요청마다 렌더링할 것인가?
 - unlisted link를 frontmatter에서 직접 생성/관리하게 할 것인가, Lumenote dashboard에서 생성하게 할 것인가?
-- Vercel 권한 위임을 MVP에 포함할 것인가?
-- 공개 사이트의 기본 URL은 subdomain 방식으로 갈 것인가, `lumenote.dev/{site}` 방식으로 갈 것인가?
+- 공개 사이트의 장기 URL은 subdomain 방식으로 갈 것인가, `lumenote.dev/{site}` 방식으로 갈 것인가?
 - Tolaria 앱 내부에서 Lumenote publish 상태를 보여주는 integration을 만들 것인가?
 
 ## 권장 첫 구현 순서
@@ -342,7 +351,6 @@ MVP는 옵션 A가 가장 단순하다. Vercel은 추후 custom deployment adapt
 3. wikilink resolver
 4. static renderer prototype
 5. GitHub App integration
-6. ingestion worker
+6. GitHub Action changed-path notifier
 7. public/unlisted route serving
 8. small dashboard
-
