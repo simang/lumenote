@@ -1,0 +1,34 @@
+name: Lumenote
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.md"
+      - "**/*.png"
+      - "**/*.jpg"
+      - "**/*.jpeg"
+      - "**/*.gif"
+      - "**/*.webp"
+      - "**/*.svg"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Notify Lumenote
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          LUMENOTE_API_URL: ${{ secrets.LUMENOTE_API_URL }}
+          LUMENOTE_INGEST_TOKEN: ${{ secrets.LUMENOTE_INGEST_TOKEN }}
+          LUMENOTE_SITE_ID: ${{ secrets.LUMENOTE_SITE_ID }}
+        run: node .github/scripts/lumenote-changes.mjs
