@@ -2,7 +2,7 @@
 
 ## 상태
 
-이 문서는 Lumenote MVP의 구현 설계를 정의한다. 제품 요구사항은 `SPEC.md`가 기준이고, 이 문서는 실제 앱을 어떤 컴포넌트와 데이터 흐름으로 만들지 결정한다.
+이 문서는 Lumenote MVP의 구현 설계를 정의한다. 제품 요구사항은 [`SPEC.md`](SPEC.md)가 기준이고, 이 문서는 실제 앱을 어떤 컴포넌트와 데이터 흐름으로 만들지 결정한다.
 
 현재 MVP는 단일 사용자 운영을 전제로 한다. Vercel은 Lumenote 앱 자체를 호스팅하는 플랫폼으로 사용하고, 사용자별 Vercel 권한 위임이나 site별 Vercel 배포는 MVP에서 제외한다.
 
@@ -279,8 +279,8 @@ Full sync는 오래 걸릴 수 있으므로 batch 처리 가능하게 만든다.
 3. deleted/renamed old path는 note와 asset을 unpublished/deleted 처리
 4. modified/added/renamed new path는 GitHub에서 `after` ref 기준으로 content fetch
 5. Markdown은 frontmatter parse
-6. `publish: true`가 아니면 public note store에서 제거
-7. `publish: true`면 Markdown AST 생성
+6. `lumenote.publish: true`가 아니면 public note store에서 제거
+7. `lumenote.publish: true`면 Markdown AST 생성
 8. wikilink, embed, heading, outgoing link 추출
 9. slug 계산 및 충돌 검사
 10. HTML 또는 renderable content 저장
@@ -336,6 +336,21 @@ type NormalizedNote = {
   publish: boolean;
   visibility: "public" | "unlisted" | "private";
   frontmatter: Record<string, unknown>;
+  lumenote: {
+    publish: boolean;
+    visibility: "public" | "unlisted" | "private";
+    slug?: string;
+    canonical?: string;
+    theme: string;
+    nav: boolean;
+    backlinks: boolean;
+    comments: boolean;
+    access: {
+      password: string | null;
+      expires_at: string | null;
+      allowlist: string[];
+    };
+  };
   body: string;
   html: string;
   outgoingLinks: NoteLink[];
@@ -356,11 +371,35 @@ type NormalizedNote = {
 
 우선순위:
 
-1. frontmatter `slug`
+1. frontmatter `lumenote.slug`
 2. Tolaria note id가 있으면 note id 기반 slug
 3. vault 상대 path 기반 slug
 
 중복 slug는 자동 suffix를 붙이지 않고 ingest error로 표시한다. 공개 URL이 조용히 바뀌면 안 되기 때문이다.
+
+### Publish config resolution
+
+Lumenote 전용 설정은 frontmatter의 `lumenote.*`만 canonical로 사용한다.
+
+루트에서 읽는 일반 메타데이터:
+
+- `title`
+- `description`
+- `tags`
+
+Lumenote 전용 메타데이터:
+
+- `lumenote.publish`
+- `lumenote.visibility`
+- `lumenote.slug`
+- `lumenote.canonical`
+- `lumenote.theme`
+- `lumenote.nav`
+- `lumenote.backlinks`
+- `lumenote.comments`
+- `lumenote.access`
+
+MVP에서는 루트 `publish`, `visibility`, `slug` alias를 지원하지 않는다. 충돌과 의미 혼선을 줄이기 위해 처음부터 명시적인 namespace를 기준으로 삼는다.
 
 ### Wikilink resolution
 
@@ -380,7 +419,7 @@ type NormalizedNote = {
 3. filename match
 4. ambiguous이면 unresolved 처리
 
-대상 note가 `publish: true`가 아니면 public HTML에는 링크를 걸지 않는다. 단, 표시 텍스트는 유지한다.
+대상 note가 `lumenote.publish: true`가 아니면 public HTML에는 링크를 걸지 않는다. 단, 표시 텍스트는 유지한다.
 
 ### Backlinks
 
@@ -461,9 +500,10 @@ site_id, path
 | `slug` | text | unique per site |
 | `title` | text | resolved title |
 | `description` | text null |  |
-| `publish` | boolean | frontmatter result |
-| `visibility` | text | `public`, `unlisted`, `private` |
-| `frontmatter` | jsonb | sanitized metadata |
+| `publish` | boolean | resolved from `lumenote.publish` |
+| `visibility` | text | resolved from `lumenote.visibility` |
+| `frontmatter` | jsonb | sanitized full metadata |
+| `lumenote` | jsonb | normalized Lumenote config |
 | `body_hash` | text | content hash |
 | `html` | text | sanitized rendered HTML |
 | `parse_error` | text null | last error |
@@ -671,4 +711,3 @@ fixtures/vault/frontmatter
 - GitHub repository contents API: https://docs.github.com/en/rest/repos/contents
 - GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 - GitHub Actions events: https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows
-

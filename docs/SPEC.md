@@ -2,7 +2,7 @@
 
 ## 구현 설계
 
-MVP 구현 설계는 [`docs/DESIGN.md`](docs/DESIGN.md)에 둔다. 이 문서는 제품 요구사항과 범위를 설명하고, 세부 아키텍처와 API 계약은 설계 문서를 기준으로 한다.
+MVP 구현 설계는 [`DESIGN.md`](DESIGN.md)에 둔다. 이 문서는 제품 요구사항과 범위를 설명하고, 세부 아키텍처와 API 계약은 설계 문서를 기준으로 한다.
 
 ## 개요
 
@@ -56,7 +56,7 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 
 ### 2. 공개 노트 publish
 
-1. 사용자가 Tolaria 노트 frontmatter에 publish 설정을 추가한다.
+1. 사용자가 Tolaria 노트 frontmatter에 `lumenote.publish: true`를 추가한다.
 2. GitHub에 commit/push한다.
 3. vault repository의 GitHub Action이 변경된 path 목록을 Lumenote API로 전달한다.
 4. Lumenote가 GitHub App 권한으로 변경된 파일만 읽는다.
@@ -65,7 +65,7 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 
 ### 3. 공유 링크 생성
 
-1. 노트 frontmatter에 `visibility: unlisted`를 설정한다.
+1. 노트 frontmatter에 `lumenote.visibility: unlisted`를 설정한다.
 2. Lumenote가 예측 불가능한 share token을 포함한 URL을 생성한다.
 3. 링크를 받은 사람은 로그인 없이 페이지를 볼 수 있다.
 4. 만료일, password, allowlist가 설정된 경우 Lumenote 서버가 접근을 검사한다.
@@ -75,16 +75,16 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 초기 제안 스키마:
 
 ```yaml
-publish: true
-visibility: public
-slug: my-note
 title: My Note
 description: Short page description
-canonical: https://example.com/my-note
 tags:
   - product
   - note
 lumenote:
+  publish: true
+  visibility: public
+  slug: my-note
+  canonical: https://example.com/my-note
   theme: default
   nav: true
   backlinks: true
@@ -95,17 +95,19 @@ lumenote:
     allowlist: []
 ```
 
+루트 frontmatter는 Tolaria와 일반 Markdown tooling에서도 자연스럽게 쓰이는 메타데이터로 제한한다. Lumenote의 publish, URL, 렌더링, 접근 제어 설정은 `lumenote.*` 아래에 둔다. MVP에서는 루트 `publish`, `visibility`, `slug` alias를 지원하지 않는다.
+
 ### 필드 정의
 
 | 필드 | 타입 | 기본값 | 설명 |
 |---|---:|---:|---|
-| `publish` | boolean | `false` | 노트 publish 여부 |
-| `visibility` | string | `public` | `public`, `unlisted`, `private` |
-| `slug` | string | 파일 경로 기반 | 웹 URL 경로 |
 | `title` | string | 파일명 또는 Markdown H1 | 페이지 제목 |
 | `description` | string | 없음 | SEO/미리보기 설명 |
-| `canonical` | string | 없음 | canonical URL |
 | `tags` | string[] | `[]` | 태그 및 탐색용 메타데이터 |
+| `lumenote.publish` | boolean | `false` | 노트 publish 여부 |
+| `lumenote.visibility` | string | `public` | `public`, `unlisted`, `private` |
+| `lumenote.slug` | string | 파일 경로 기반 | 웹 URL 경로 |
+| `lumenote.canonical` | string | 없음 | canonical URL |
 | `lumenote.theme` | string | `default` | 페이지 테마 |
 | `lumenote.nav` | boolean | `true` | 사이트 내 탐색 노출 여부 |
 | `lumenote.backlinks` | boolean | `true` | backlink 영역 노출 여부 |
@@ -132,7 +134,7 @@ lumenote:
 ### Private
 
 - publish 대상에서 제외하거나 인증된 소유자만 접근 가능
-- MVP에서는 `publish: false`와 동일하게 처리할 수 있다.
+- MVP에서는 `lumenote.publish: false`와 동일하게 처리할 수 있다.
 
 ## URL 설계
 
@@ -152,9 +154,9 @@ https://notes.example.com/share/{token}
 
 slug 충돌 처리:
 
-1. 명시적 `slug`가 있으면 우선 사용한다.
+1. 명시적 `lumenote.slug`가 있으면 우선 사용한다.
 2. 중복 slug는 빌드 오류로 표시한다.
-3. `slug`가 없으면 vault 상대 경로를 URL-safe path로 변환한다.
+3. `lumenote.slug`가 없으면 vault 상대 경로를 URL-safe path로 변환한다.
 
 ## 렌더링 요구사항
 
@@ -235,6 +237,7 @@ GitHub Repository
 - `publish`
 - `content_hash`
 - `frontmatter`
+- `lumenote`
 - `html`
 - `created_at`
 - `updated_at`
@@ -312,7 +315,7 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 
 1. GitHub App 기반 repository 연결
 2. GitHub Action 기반 changed-path trigger
-3. frontmatter `publish: true` 노트만 인덱싱
+3. frontmatter `lumenote.publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
 5. `unlisted` share link 생성
 6. wikilink 기본 변환
