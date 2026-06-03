@@ -6,6 +6,11 @@ Lumenote는 Tolaria Markdown vault에서 선택된 노트만 웹 페이지로 pu
 
 - `docs/SPEC.md`
 - `docs/DESIGN.md`
+- `docs/FRONTMATTER_AGENT_GUIDE.md`
+
+배포 가능한 AI agent skill은 다음 경로에 있습니다.
+
+- `skills/lumenote-publisher`
 
 ## 현재 구현 범위
 
@@ -118,6 +123,8 @@ LUMENOTE_SITE_ID
 ```
 
 Action은 push diff에서 Markdown과 supported asset path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 Action payload에 포함하지 않습니다.
+
+GitHub Action이 없는 vault repository에서는 `skills/lumenote-publisher` skill을 사용해 AI agent가 같은 API를 직접 호출할 수 있습니다.
 
 ## Frontmatter
 
