@@ -1,6 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { runFullSync } from "@/lib/ingest";
-import { findSiteForUser } from "@/lib/repositories";
+import { createFullSyncJobForUser } from "@/lib/repositories";
 
 export const runtime = "nodejs";
 
@@ -39,20 +38,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "site_id is required" }, { status: 400 });
   }
 
-  const site = await findSiteForUser(user.id, payload.siteId);
-  if (!site) {
+  try {
+    const job = await createFullSyncJobForUser(user.id, payload.siteId, payload.ref);
+    if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+      return Response.json({
+        ingest_job_id: job.id,
+        status: job.status,
+        created: job.created,
+      });
+    }
+
+    const redirectPath = safeRedirectPath(payload.redirectTo, "/dashboard");
+    const redirectUrl = new URL(redirectPath, request.url);
+    redirectUrl.searchParams.set(job.created ? "job_queued" : "job_existing", job.id);
+    return Response.redirect(redirectUrl, 303);
+  } catch {
     return Response.json({ error: "site not found" }, { status: 404 });
   }
-
-  const result = await runFullSync({
-    siteId: payload.siteId,
-    ref: payload.ref,
-    trigger: "dashboard_full_sync",
-  });
-
-  if ((request.headers.get("content-type") ?? "").includes("application/json")) {
-    return Response.json(result);
-  }
-
-  return Response.redirect(new URL(safeRedirectPath(payload.redirectTo, "/dashboard"), request.url), 303);
 }

@@ -34,6 +34,23 @@ export type SiteWithIngestToken = Site & {
   ingest_token: string | null;
 };
 
+export type IngestJob = {
+  id: string;
+  site_id: string;
+  kind: "full_sync";
+  ref: string | null;
+  trigger: "dashboard_full_sync" | "manual";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  ingest_run_id: string | null;
+  summary: Record<string, unknown>;
+  error: string | null;
+  requested_by_user_id: string | null;
+  created_at: Date;
+  started_at: Date | null;
+  finished_at: Date | null;
+  updated_at: Date;
+};
+
 export function countUsers() {
   return queryOne<{ count: number }>("select count(*)::int as count from users");
 }
@@ -221,6 +238,130 @@ export function findSiteIngestTokenHash(siteId: string) {
     "select id, ingest_token_hash from sites where id = $1",
     [siteId],
   );
+}
+
+export async function createFullSyncJobForUser(userId: string, siteId: string, ref?: string) {
+  const row = await queryOne<IngestJob & { created: boolean }>(
+    `
+      with selected_site as (
+        select id, branch
+        from sites
+        where id = $1 and user_id = $2
+      ),
+      inserted as (
+        insert into ingest_jobs(id, site_id, kind, ref, trigger, status, requested_by_user_id)
+        select $3, id, 'full_sync', coalesce($4, branch), 'dashboard_full_sync', 'queued', $2
+        from selected_site
+        where not exists (
+          select 1
+          from ingest_jobs
+          where ingest_jobs.site_id = selected_site.id
+            and ingest_jobs.kind = 'full_sync'
+            and ingest_jobs.status in ('queued', 'running')
+        )
+        returning *, true as created
+      )
+      select *
+      from inserted
+      union all
+      select ingest_jobs.*, false as created
+      from ingest_jobs
+      join selected_site on selected_site.id = ingest_jobs.site_id
+      where ingest_jobs.kind = 'full_sync'
+        and ingest_jobs.status in ('queued', 'running')
+        and not exists (select 1 from inserted)
+      order by created_at asc
+      limit 1
+    `,
+    [siteId, userId, newId("job"), ref ?? null],
+  );
+
+  if (!row) {
+    throw new Error("Site not found");
+  }
+
+  return row;
+}
+
+export function listRecentIngestJobsForSiteForUser(userId: string, siteId: string, limit = 20) {
+  return query<IngestJob>(
+    `
+      select ingest_jobs.*
+      from ingest_jobs
+      join sites on sites.id = ingest_jobs.site_id
+      where sites.user_id = $1 and sites.id = $2
+      order by ingest_jobs.created_at desc
+      limit $3
+    `,
+    [userId, siteId, limit],
+  );
+}
+
+export async function claimNextQueuedIngestJob(
+  client: PoolClient,
+  input: { userId?: string; siteId?: string } = {},
+) {
+  const result = await client.query<IngestJob>(
+    `
+      update ingest_jobs
+      set
+        status = 'running',
+        started_at = coalesce(started_at, now()),
+        error = null
+      where id = (
+        select ingest_jobs.id
+        from ingest_jobs
+        join sites on sites.id = ingest_jobs.site_id
+        where ingest_jobs.status = 'queued'
+          and ($1::text is null or sites.user_id = $1)
+          and ($2::text is null or ingest_jobs.site_id = $2)
+        order by ingest_jobs.created_at asc
+        for update of ingest_jobs skip locked
+        limit 1
+      )
+      returning *
+    `,
+    [input.userId ?? null, input.siteId ?? null],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+export async function finishIngestJob(
+  jobId: string,
+  input: {
+    status: "completed" | "failed";
+    ingestRunId?: string | null;
+    summary?: Record<string, unknown>;
+    error?: string | null;
+  },
+) {
+  const row = await queryOne<IngestJob>(
+    `
+      update ingest_jobs
+      set
+        status = $2,
+        ingest_run_id = $3,
+        summary = $4::jsonb,
+        error = $5,
+        finished_at = now()
+      where id = $1
+      returning *
+    `,
+    [
+      jobId,
+      input.status,
+      input.ingestRunId ?? null,
+      JSON.stringify(input.summary ?? {}),
+      input.error ?? null,
+    ],
+  );
+
+  if (!row) {
+    throw new Error("Ingest job not found");
+  }
+
+  return row;
 }
 
 export function listRecentIngestRuns(limit = 20) {
@@ -414,6 +555,23 @@ export function findPublicNote(siteId: string, slug: string) {
         and deleted_at is null
     `,
     [siteId, slug],
+  );
+}
+
+export function listPublicNotesForSite(siteId: string, limit = 100) {
+  return query<Pick<Note, "id" | "title" | "slug" | "description" | "path" | "published_at">>(
+    `
+      select id, title, slug, description, path, published_at
+      from notes
+      where site_id = $1
+        and publish is true
+        and visibility = 'public'
+        and parse_error is null
+        and deleted_at is null
+      order by lower(title) asc, path asc
+      limit $2
+    `,
+    [siteId, limit],
   );
 }
 

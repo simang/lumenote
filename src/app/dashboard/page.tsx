@@ -264,7 +264,7 @@ export default async function DashboardPage({
                       <input name="ref" type="hidden" value={site.branch} />
                       <input name="redirect_to" type="hidden" value={`/dashboard/sites/${site.id}`} />
                       <button className="secondary" type="submit">
-                        Sync now
+                        Queue sync
                       </button>
                     </form>
                   </td>

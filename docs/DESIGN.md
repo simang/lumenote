@@ -12,7 +12,7 @@
 |---|---|
 | 앱 호스팅 | Vercel에 Lumenote Next.js 앱을 1개 배포 |
 | vault 접근 | GitHub App installation token으로 repository contents read |
-| 업데이트 트리거 | Dashboard full sync 또는 AI agent/API client가 changed paths를 Lumenote API에 전달 |
+| 업데이트 트리거 | Dashboard full sync job 또는 AI agent/API client가 changed paths를 Lumenote API에 전달 |
 | 파일 내용 전달 | ingest trigger는 파일 내용을 보내지 않고 path/status/commit만 보낸다 |
 | 노트 serving | Lumenote 앱이 materialized note store에서 직접 제공 |
 | Vercel OAuth | MVP 제외 |
@@ -27,7 +27,7 @@
 ```text
 Tolaria vault repository
   -> User dashboard sync trigger or AI agent/API trigger
-  -> POST /api/ingest/full-sync or POST /api/ingest/changed-paths
+  -> queue full sync job or POST /api/ingest/changed-paths
   -> Lumenote ingestion service
   -> GitHub App reads changed files at commit SHA
   -> Markdown/frontmatter/wikilink parser
@@ -136,7 +136,7 @@ MVP 인증:
 - Repository contents: read-only
 - Webhooks: optional for later managed mode
 
-MVP에서는 GitHub webhook이나 repo-local 자동화 파일을 기본 경로로 사용하지 않는다. GitHub App은 파일 내용을 안전하게 읽기 위해 필요하고, 업데이트는 dashboard full sync 또는 AI agent/API trigger로 시작한다.
+MVP에서는 GitHub webhook이나 repo-local 자동화 파일을 기본 경로로 사용하지 않는다. GitHub App은 파일 내용을 안전하게 읽기 위해 필요하고, 업데이트는 dashboard full sync job 또는 AI agent/API trigger로 시작한다.
 
 저장해야 하는 값:
 
@@ -160,7 +160,7 @@ Trigger client의 역할:
 4. repository owner, repo, branch, before SHA, after SHA를 payload에 포함
 5. payload를 `POST /api/ingest/changed-paths`로 전송
 
-공식 agent 경로는 `skills/lumenote-publisher` skill이다. 사용자가 웹에서 직접 갱신하려면 dashboard UI의 full sync action을 사용한다.
+공식 agent 경로는 `skills/lumenote-publisher` skill이다. 사용자가 웹에서 직접 갱신하려면 dashboard UI의 full sync job action을 사용한다.
 
 ## Ingestion API
 
@@ -218,7 +218,7 @@ Validation:
 
 ### POST `/api/ingest/full-sync`
 
-Dashboard UI에서 호출한다.
+Dashboard UI에서 호출한다. 이 endpoint는 sync를 직접 실행하지 않고 `ingest_jobs`에 full sync job을 queue한다.
 
 Request:
 
@@ -237,7 +237,16 @@ Request:
 4. 변경된 파일만 batch로 fetch한다.
 5. 누락된 파일은 deleted 처리한다.
 
-Full sync는 오래 걸릴 수 있으므로 batch 처리 가능하게 만든다. MVP에서는 수백 개 vault를 대상으로 1회 요청 처리부터 시작하되, API shape는 나중에 job queue로 옮겨도 깨지지 않게 유지한다.
+Full sync는 오래 걸릴 수 있으므로 dashboard request에서 직접 실행하지 않는다. MVP에서는 `ingest_jobs`에 queue한 뒤 worker endpoint가 한 번에 job 하나를 claim해서 실행한다.
+
+### POST `/api/ingest/jobs/run`
+
+Queued full sync job을 하나 claim해서 실행한다.
+
+- Dashboard에서 로그인 세션으로 site별 queued job을 수동 실행할 수 있다.
+- Worker/cron client는 `Authorization: Bearer {INGEST_WORKER_TOKEN}`을 사용한다.
+- `INGEST_WORKER_TOKEN`이 없으면 legacy `LUMENOTE_INGEST_TOKEN`을 fallback으로 사용한다.
+- 같은 site에 `queued` 또는 `running` full sync job이 있으면 추가 job은 만들지 않는다.
 
 ## Ingestion 알고리즘
 
@@ -576,7 +585,33 @@ site_id, target_note_id
 | `started_at` | timestamptz |  |
 | `finished_at` | timestamptz null |  |
 
+### `ingest_jobs`
+
+| column | type | note |
+|---|---|---|
+| `id` | text pk | `job_` prefix |
+| `site_id` | text | owner site |
+| `kind` | text | `full_sync` |
+| `ref` | text null | branch/ref to sync |
+| `trigger` | text | `dashboard_full_sync`, `manual` |
+| `status` | text | `queued`, `running`, `completed`, `failed`, `cancelled` |
+| `ingest_run_id` | text null | completed run log |
+| `summary` | jsonb | result summary |
+| `error` | text null | last error |
+| `requested_by_user_id` | text null | dashboard user |
+| `created_at` | timestamptz |  |
+| `started_at` | timestamptz null |  |
+| `finished_at` | timestamptz null |  |
+| `updated_at` | timestamptz |  |
+
 ## Public rendering
+
+### GET `/p/{site_slug}`
+
+1. site 조회
+2. public note 목록 조회
+3. title/path 기준으로 정렬된 site home 반환
+4. unlisted/private note는 제외
 
 ### GET `/p/{site_slug}/{note_slug}`
 
@@ -650,6 +685,7 @@ GITHUB_APP_ID=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_WEBHOOK_SECRET=
 LUMENOTE_INGEST_TOKEN=
+INGEST_WORKER_TOKEN=
 BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
 AUTH_SESSION_SECRET=
@@ -694,7 +730,7 @@ fixtures/vault/frontmatter
 7. GitHub App installation token client
 8. changed-path ingestion API
 9. Lumenote publisher agent skill
-10. dashboard full sync action
+10. dashboard full sync job action
 11. asset storage/proxy
 12. dashboard UI
 13. share link

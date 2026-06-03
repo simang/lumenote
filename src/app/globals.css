@@ -161,9 +161,29 @@ input:disabled {
   color: #1b5e20;
 }
 
+.status-completed {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.status-queued {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.status-running {
+  background: #e8f1ff;
+  color: #174ea6;
+}
+
 .status-expired {
   background: #fff4e5;
   color: #8a4b00;
+}
+
+.status-failed {
+  background: #ffe8e5;
+  color: var(--danger);
 }
 
 .status-revoked {
@@ -250,6 +270,28 @@ details[open] summary {
   gap: 12px;
   margin-top: 32px;
   padding-top: 24px;
+}
+
+.note-list {
+  display: grid;
+  gap: 16px;
+}
+
+.note-list-item {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  padding-bottom: 16px;
+}
+
+.note-list-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.note-list-item h3,
+.note-list-item p {
+  margin: 0;
 }
 
 .danger {

@@ -24,7 +24,8 @@ AI agent가 vault frontmatter를 수정하거나 직접 ingest API를 호출할 
 - User password session
 - Markdown/frontmatter/wikilink parser
 - Sanitized HTML materialized note store
-- Public route: `/p/{site_slug}/{note_slug}`
+- Public site route: `/p/{site_slug}`
+- Public note route: `/p/{site_slug}/{note_slug}`
 - Share route: `/s/{share_token}`
 - Asset proxy route: `/assets/{site_id}/{source_sha}/{asset_path}`
 - User dashboard, full sync, share-link generation and revocation
@@ -57,6 +58,7 @@ GITHUB_APP_INSTALL_URL=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_WEBHOOK_SECRET=
 LUMENOTE_INGEST_TOKEN=
+INGEST_WORKER_TOKEN=
 
 BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
@@ -77,7 +79,7 @@ OBJECT_STORAGE_BUCKET=
 
 `SHARE_TOKEN_ENCRYPTION_SECRET`은 dashboard에서 생성된 unlisted URL을 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. 기존에 hash만 저장된 share link URL은 복구할 수 없으므로 새 URL을 생성해야 합니다.
 
-`INGEST_TOKEN_ENCRYPTION_SECRET`은 site별 agent ingest token을 dashboard에서 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `SHARE_TOKEN_ENCRYPTION_SECRET` 또는 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. `LUMENOTE_INGEST_TOKEN`은 site token이 아직 발급되지 않은 site를 위한 legacy fallback입니다.
+`INGEST_TOKEN_ENCRYPTION_SECRET`은 site별 agent ingest token을 dashboard에서 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `SHARE_TOKEN_ENCRYPTION_SECRET` 또는 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. `LUMENOTE_INGEST_TOKEN`은 site token이 아직 발급되지 않은 site를 위한 legacy fallback입니다. `INGEST_WORKER_TOKEN`은 queued ingest job runner용 bearer token이며, 없으면 `LUMENOTE_INGEST_TOKEN`을 fallback으로 사용합니다.
 
 ## DB migration
 
@@ -106,7 +108,7 @@ http://localhost:3000/dashboard
 3. 최초 사용자는 `BOOTSTRAP_USER_EMAIL`/bootstrap password로 로그인해 user account를 bootstrap합니다.
 4. `/dashboard`에서 GitHub App을 설치하고 repository를 site로 등록합니다.
 5. `/dashboard/sites/{site_id}`에서 site-specific ingest token을 발급합니다.
-6. Dashboard에서 full sync를 실행하거나 CLI로 실행합니다.
+6. Dashboard에서 full sync job을 queue하고 job runner를 실행합니다.
 7. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
 
 GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
@@ -119,7 +121,7 @@ GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
 
 ## Full sync
 
-Dashboard에서 실행하거나 CLI로 실행할 수 있습니다.
+Dashboard에서 queue하고 worker endpoint 또는 dashboard의 `Run queued job` 버튼으로 실행할 수 있습니다.
 
 ```bash
 npm run ingest:full -- --site site_123
@@ -127,6 +129,13 @@ npm run ingest:full -- --site site_123 --ref main
 ```
 
 Full sync는 repository tree를 읽고, Markdown과 supported asset만 ingestion 대상으로 처리합니다.
+
+Worker endpoint:
+
+```text
+POST /api/ingest/jobs/run
+Authorization: Bearer {INGEST_WORKER_TOKEN}
+```
 
 ## Agent/API ingest trigger
 
@@ -149,7 +158,7 @@ LUMENOTE_SITE_TOKEN
 Skill은 `git diff --name-status {before} {after}`로 Markdown과 supported asset 변경 path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 API payload에 포함하지 않습니다.
 `LUMENOTE_INGEST_TOKEN`은 기존 배포 호환용 fallback으로만 사용합니다.
 
-웹에서는 `/dashboard`의 full sync 버튼으로 사용자가 직접 전체 갱신을 trigger할 수 있습니다.
+웹에서는 `/dashboard/sites/{site_id}`의 full sync 버튼으로 사용자가 직접 전체 갱신 job을 queue하고 실행할 수 있습니다.
 
 ## Frontmatter
 
@@ -210,7 +219,9 @@ POST /api/share-links/manage
 
 POST /api/ingest/changed-paths
 POST /api/ingest/full-sync
+POST /api/ingest/jobs/run
 
+GET  /p/{site_slug}
 GET  /p/{site_slug}/{note_slug}
 GET  /s/{share_token}
 GET  /assets/{site_id}/{source_sha}/{asset_path}

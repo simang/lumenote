@@ -60,13 +60,13 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 2. GitHub App을 vault repository에 설치한다.
 3. Lumenote dashboard에서 repository owner, name, branch를 설정한다.
 4. Lumenote가 GitHub App installation token으로 repository tree와 필요한 파일을 읽는다.
-5. 사용자가 full sync를 실행해서 Markdown 파일을 최초 인덱싱한다.
+5. 사용자가 full sync job을 queue하고 실행해서 Markdown 파일을 최초 인덱싱한다.
 
 ### 2. 공개 노트 publish
 
 1. 사용자가 Tolaria 노트 frontmatter에 `lumenote.publish: true`를 추가한다.
 2. GitHub에 commit/push한다.
-3. 사용자가 Lumenote dashboard에서 full sync를 실행하거나, AI agent/API client가 변경된 path 목록을 Lumenote API로 전달한다.
+3. 사용자가 Lumenote dashboard에서 full sync job을 queue하거나, AI agent/API client가 변경된 path 목록을 Lumenote API로 전달한다.
 4. Lumenote가 GitHub App 권한으로 변경된 파일만 읽는다.
 5. 변경된 노트를 다시 인덱싱한다.
 6. public URL 또는 unlisted URL을 생성한다.
@@ -188,7 +188,7 @@ slug 충돌 처리:
 
 ```text
 GitHub Repository
-  -> Dashboard full sync or Agent/API changed-path trigger
+  -> Dashboard full sync job or Agent/API changed-path trigger
   -> Lumenote API Server
   -> GitHub App read-only file fetch
   -> Vault Ingestion Worker
@@ -324,14 +324,14 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 ## MVP 범위
 
 1. GitHub App 기반 repository 연결
-2. Dashboard full sync와 site-specific Agent/API 기반 changed-path trigger
+2. Async dashboard full sync와 site-specific Agent/API 기반 changed-path trigger
 3. frontmatter `lumenote.publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
 5. `unlisted` share link 생성, 복사, 만료, 폐기
 6. wikilink 기본 변환
 7. 이미지 asset serving
 8. path-based URL
-9. dashboard full sync
+9. `/p/{site_slug}` public site home
 10. 기본 대시보드와 site detail page
 
 ## MVP 이후

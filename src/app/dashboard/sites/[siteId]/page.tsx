@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { appUrlFromRequest } from "@/lib/config";
 import {
   findSiteWithIngestTokenForUser,
+  listRecentIngestJobsForSiteForUser,
   listPublishedNotesForSiteForUser,
   listRecentIngestRunsForSiteForUser,
   listShareLinksForSiteForUser,
@@ -51,6 +52,10 @@ export default async function SiteDetailPage({
   params: Promise<{ siteId: string }>;
   searchParams: Promise<{
     share_error?: string;
+    job_empty?: string;
+    job_existing?: string;
+    job_processed?: string;
+    job_queued?: string;
     share_link_id?: string;
     token_error?: string;
     token_revoked?: string;
@@ -66,9 +71,10 @@ export default async function SiteDetailPage({
     notFound();
   }
 
-  const [notes, shareLinks, runs] = await Promise.all([
+  const [notes, shareLinks, jobs, runs] = await Promise.all([
     listPublishedNotesForSiteForUser(user.id, site.id),
     listShareLinksForSiteForUser(user.id, site.id),
+    listRecentIngestJobsForSiteForUser(user.id, site.id),
     listRecentIngestRunsForSiteForUser(user.id, site.id),
   ]);
   const appUrl = appUrlFromRequest();
@@ -77,6 +83,7 @@ export default async function SiteDetailPage({
   const selectedShareLink = query.share_link_id
     ? shareLinks.find((shareLink) => shareLink.id === query.share_link_id)
     : null;
+  const activeJob = jobs.find((job) => job.status === "queued" || job.status === "running");
   const agentEnv = site.ingest_token
     ? [
         `export LUMENOTE_API_URL="${appUrl}"`,
@@ -120,6 +127,26 @@ export default async function SiteDetailPage({
       {query.token_revoked ? (
         <section className="card stack">
           <p className="muted">Site ingest token revoked.</p>
+        </section>
+      ) : null}
+      {query.job_queued ? (
+        <section className="card stack">
+          <p className="muted">Full sync job queued: {query.job_queued}</p>
+        </section>
+      ) : null}
+      {query.job_existing ? (
+        <section className="card stack">
+          <p className="muted">A full sync job is already active: {query.job_existing}</p>
+        </section>
+      ) : null}
+      {query.job_processed ? (
+        <section className="card stack">
+          <p className="muted">Ingest job processed: {query.job_processed}</p>
+        </section>
+      ) : null}
+      {query.job_empty ? (
+        <section className="card stack">
+          <p className="muted">No queued ingest jobs for this site.</p>
         </section>
       ) : null}
       {selectedShareLink ? (
@@ -225,14 +252,64 @@ export default async function SiteDetailPage({
 
       <section className="card stack">
         <h2>Full sync</h2>
+        <p className="muted">
+          Queue a full repository scan, then run the queued job. This keeps the dashboard request
+          short and avoids long sync work during form submission.
+        </p>
+        {activeJob ? (
+          <p className="muted">
+            Active job: {activeJob.id} · {activeJob.status} · Created {formatUtcDate(activeJob.created_at)}
+          </p>
+        ) : null}
         <form action="/api/ingest/full-sync" method="post">
           <input name="site_id" type="hidden" value={site.id} />
           <input name="ref" type="hidden" value={site.branch} />
           <input name="redirect_to" type="hidden" value={currentPath} />
           <button className="secondary" type="submit">
-            Sync now
+            Queue full sync
           </button>
         </form>
+        <form action="/api/ingest/jobs/run" method="post">
+          <input name="site_id" type="hidden" value={site.id} />
+          <input name="redirect_to" type="hidden" value={currentPath} />
+          <button className="secondary" type="submit">
+            Run queued job
+          </button>
+        </form>
+      </section>
+
+      <section className="card stack">
+        <h2>Ingest jobs</h2>
+        {jobs.length === 0 ? (
+          <p className="muted">No ingest jobs for this site.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Status</th>
+                <th>Ref</th>
+                <th>Run</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id}>
+                  <td>{job.id}</td>
+                  <td>
+                    <span className={`badge status-${job.status}`}>{job.status}</span>
+                    <br />
+                    <span className="muted">Created {formatUtcDate(job.created_at)}</span>
+                  </td>
+                  <td>{job.ref ?? "default"}</td>
+                  <td>{job.ingest_run_id ?? "—"}</td>
+                  <td>{job.error ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className="card stack">
@@ -372,7 +449,7 @@ export default async function SiteDetailPage({
       </section>
 
       <section className="card stack">
-        <h2>Recent ingestion runs</h2>
+        <h2>Recent ingestion run logs</h2>
         {runs.length === 0 ? (
           <p className="muted">No ingestion runs for this site.</p>
         ) : (
