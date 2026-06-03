@@ -3,8 +3,16 @@ import { revokeShareLinkForUser, updateShareLinkExpiryForUser } from "@/lib/repo
 
 export const runtime = "nodejs";
 
-function dashboardRedirect(request: Request, params: Record<string, string>) {
-  const url = new URL("/dashboard", request.url);
+function safeRedirectPath(path: string | undefined) {
+  if (!path || !path.startsWith("/dashboard")) {
+    return "/dashboard";
+  }
+
+  return path;
+}
+
+function dashboardRedirect(request: Request, params: Record<string, string>, redirectTo?: string) {
+  const url = new URL(safeRedirectPath(redirectTo), request.url);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -31,25 +39,26 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   const shareLinkId = String(form.get("share_link_id") ?? "");
+  const redirectTo = form.get("redirect_to") ? String(form.get("redirect_to")) : undefined;
 
   if (!shareLinkId) {
-    return dashboardRedirect(request, { share_error: "missing_share_link" });
+    return dashboardRedirect(request, { share_error: "missing_share_link" }, redirectTo);
   }
 
   try {
     if (intent === "revoke") {
       await revokeShareLinkForUser(user.id, shareLinkId);
-      return dashboardRedirect(request, { share_link_id: shareLinkId });
+      return dashboardRedirect(request, { share_link_id: shareLinkId }, redirectTo);
     }
 
     if (intent === "update_expiry") {
       const expiresAt = parseOptionalExpiresAt(String(form.get("expires_at") ?? ""));
       await updateShareLinkExpiryForUser(user.id, shareLinkId, expiresAt);
-      return dashboardRedirect(request, { share_link_id: shareLinkId });
+      return dashboardRedirect(request, { share_link_id: shareLinkId }, redirectTo);
     }
   } catch {
-    return dashboardRedirect(request, { share_error: "share_link_update_failed" });
+    return dashboardRedirect(request, { share_error: "share_link_update_failed" }, redirectTo);
   }
 
-  return dashboardRedirect(request, { share_error: "unknown_share_link_action" });
+  return dashboardRedirect(request, { share_error: "unknown_share_link_action" }, redirectTo);
 }

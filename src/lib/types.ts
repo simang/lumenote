@@ -28,6 +28,10 @@ export type Site = {
   repo: string;
   branch: string;
   github_installation_id: string;
+  ingest_token_hash: string | null;
+  ingest_token_ciphertext: string | null;
+  ingest_token_last_four: string | null;
+  ingest_token_created_at: Date | null;
   created_at: Date;
   updated_at: Date;
 };

@@ -46,6 +46,7 @@ export async function POST(request: Request) {
   const branch = String(form.get("branch") ?? "").trim() || "main";
   const githubInstallationId = String(form.get("github_installation_id") ?? "").trim();
   const autoSlug = String(form.get("auto_slug") ?? "") === "1";
+  const redirectTo = String(form.get("redirect_to") ?? "").trim();
 
   if (!slug || !name || !owner || !repo || !githubInstallationId) {
     return Response.json({ error: "slug, name, owner, repo and github_installation_id are required" }, { status: 400 });
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
   const siteSlug = !id && autoSlug ? await availableAutoSlug(slug, owner, repo) : slug;
 
   try {
-    await upsertSite({
+    const site = await upsertSite({
       id,
       userId: user.id,
       slug: siteSlug,
@@ -80,6 +81,12 @@ export async function POST(request: Request) {
       branch,
       githubInstallationId,
     });
+
+    if (redirectTo.startsWith("/dashboard")) {
+      return Response.redirect(new URL(redirectTo, request.url), 303);
+    }
+
+    return Response.redirect(new URL(`/dashboard/sites/${site.id}`, request.url), 303);
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "23505") {
       return Response.json({ error: `site slug is already taken: ${siteSlug}` }, { status: 409 });

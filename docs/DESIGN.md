@@ -171,7 +171,7 @@ AI agent 또는 외부 API client가 호출한다.
 Headers:
 
 ```text
-Authorization: Bearer {LUMENOTE_INGEST_TOKEN}
+Authorization: Bearer {LUMENOTE_SITE_TOKEN}
 Content-Type: application/json
 ```
 
@@ -210,7 +210,8 @@ Response:
 
 Validation:
 
-- token이 맞아야 한다.
+- token은 site별 `LUMENOTE_SITE_TOKEN`과 매칭되어야 한다.
+- site token이 없는 기존 site는 legacy `LUMENOTE_INGEST_TOKEN` fallback을 허용한다.
 - `site_id`가 repository owner/repo/branch와 매칭되어야 한다.
 - `after` commit이 configured branch에 포함되어야 한다.
 - changes가 비어 있으면 no-op ingest run을 남긴다.
@@ -461,6 +462,10 @@ MVP 이후 추가 후보:
 | `repo` | text | GitHub repo |
 | `branch` | text | configured branch |
 | `github_installation_id` | text | GitHub App installation |
+| `ingest_token_hash` | text null | site-specific agent token hash |
+| `ingest_token_ciphertext` | text null | encrypted token for dashboard copy |
+| `ingest_token_last_four` | text null | display hint |
+| `ingest_token_created_at` | timestamptz null | rotation timestamp |
 | `created_at` | timestamptz |  |
 | `updated_at` | timestamptz |  |
 
@@ -626,7 +631,8 @@ Ingestion error는 가능한 한 site 전체 publish를 막지 않는다.
 
 - Lumenote API는 file content를 ingest payload에서 받지 않는다.
 - GitHub file content는 GitHub App installation token으로만 읽는다.
-- ingest token은 Lumenote env와 agent/API client secret store에만 둔다.
+- site별 ingest token은 hash와 encrypted ciphertext로 저장한다.
+- legacy global ingest token은 site token 미발급 site에 대한 fallback으로만 허용한다.
 - ingest payload의 `site_id`, repository, branch를 DB 설정과 비교한다.
 - Markdown HTML은 sanitize한다.
 - raw HTML 허용 여부는 기본 false로 둔다.
@@ -648,6 +654,7 @@ BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
 AUTH_SESSION_SECRET=
 SHARE_TOKEN_ENCRYPTION_SECRET=
+INGEST_TOKEN_ENCRYPTION_SECRET=
 OBJECT_STORAGE_ENDPOINT=
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=

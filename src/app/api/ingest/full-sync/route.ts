@@ -11,6 +11,7 @@ async function readPayload(request: Request) {
     return {
       siteId: String(body.site_id ?? body.siteId ?? ""),
       ref: body.ref ? String(body.ref) : undefined,
+      redirectTo: body.redirect_to ? String(body.redirect_to) : undefined,
     };
   }
 
@@ -18,7 +19,16 @@ async function readPayload(request: Request) {
   return {
     siteId: String(form.get("site_id") ?? ""),
     ref: form.get("ref") ? String(form.get("ref")) : undefined,
+    redirectTo: form.get("redirect_to") ? String(form.get("redirect_to")) : undefined,
   };
+}
+
+function safeRedirectPath(path: string | undefined, fallback: string) {
+  if (!path || !path.startsWith("/dashboard")) {
+    return fallback;
+  }
+
+  return path;
 }
 
 export async function POST(request: Request) {
@@ -44,5 +54,5 @@ export async function POST(request: Request) {
     return Response.json(result);
   }
 
-  return Response.redirect(new URL("/dashboard", request.url), 303);
+  return Response.redirect(new URL(safeRedirectPath(payload.redirectTo, "/dashboard"), request.url), 303);
 }

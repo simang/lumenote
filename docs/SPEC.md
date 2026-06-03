@@ -318,13 +318,13 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 - password는 bcrypt/argon2로 hash한다.
 - publish되지 않은 노트의 제목, 경로, 링크 정보가 public page에 새지 않도록 필터링한다.
 - asset도 노트와 동일한 visibility 정책을 따른다.
-- Agent/API ingest payload와 향후 webhook payload 검증을 필수로 한다.
+- Agent/API ingest payload와 site-specific token 검증을 필수로 한다.
 - Markdown HTML injection을 방지하기 위해 sanitizer를 적용한다.
 
 ## MVP 범위
 
 1. GitHub App 기반 repository 연결
-2. Dashboard full sync와 Agent/API 기반 changed-path trigger
+2. Dashboard full sync와 site-specific Agent/API 기반 changed-path trigger
 3. frontmatter `lumenote.publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
 5. `unlisted` share link 생성, 복사, 만료, 폐기
@@ -332,7 +332,7 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 7. 이미지 asset serving
 8. path-based URL
 9. dashboard full sync
-10. 기본 대시보드
+10. 기본 대시보드와 site detail page
 
 ## MVP 이후
 

@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { decryptShareToken, hashShareToken } from "./crypto";
+import { decryptIngestToken, decryptShareToken, hashShareToken } from "./crypto";
 import { query, queryOne } from "./db";
 import { newId } from "./ids";
 import type { GitHubInstallation, Note, NoteLink, Site, SourceFile, User, Visibility } from "./types";
@@ -28,6 +28,10 @@ export type UserShareLink = {
   revoked_at: Date | null;
   created_at: Date;
   updated_at: Date;
+};
+
+export type SiteWithIngestToken = Site & {
+  ingest_token: string | null;
 };
 
 export function countUsers() {
@@ -130,6 +134,18 @@ export function findSiteForUser(userId: string, siteId: string) {
   );
 }
 
+export async function findSiteWithIngestTokenForUser(userId: string, siteId: string) {
+  const site = await findSiteForUser(userId, siteId);
+  if (!site) {
+    return null;
+  }
+
+  return {
+    ...site,
+    ingest_token: decryptIngestToken(site.ingest_token_ciphertext),
+  } satisfies SiteWithIngestToken;
+}
+
 export function findSiteBySlug(slug: string) {
   return queryOne<Site>("select * from sites where slug = $1", [slug]);
 }
@@ -142,6 +158,68 @@ export function listSitesForUser(userId: string) {
   return query<Site>(
     "select * from sites where user_id = $1 order by created_at desc",
     [userId],
+  );
+}
+
+export async function rotateSiteIngestTokenForUser(
+  userId: string,
+  siteId: string,
+  input: {
+    tokenHash: string;
+    tokenCiphertext: string;
+    tokenLastFour: string;
+  },
+) {
+  const row = await queryOne<Site>(
+    `
+      update sites
+      set
+        ingest_token_hash = $3,
+        ingest_token_ciphertext = $4,
+        ingest_token_last_four = $5,
+        ingest_token_created_at = now()
+      where id = $1 and user_id = $2
+      returning *
+    `,
+    [siteId, userId, input.tokenHash, input.tokenCiphertext, input.tokenLastFour],
+  );
+
+  if (!row) {
+    throw new Error("Site not found");
+  }
+
+  return {
+    ...row,
+    ingest_token: decryptIngestToken(row.ingest_token_ciphertext),
+  } satisfies SiteWithIngestToken;
+}
+
+export async function revokeSiteIngestTokenForUser(userId: string, siteId: string) {
+  const row = await queryOne<Site>(
+    `
+      update sites
+      set
+        ingest_token_hash = null,
+        ingest_token_ciphertext = null,
+        ingest_token_last_four = null,
+        ingest_token_created_at = null
+      where id = $1 and user_id = $2
+      returning *
+    `,
+    [siteId, userId],
+  );
+
+  if (!row) {
+    throw new Error("Site not found");
+  }
+
+  return row;
+}
+
+export function findSiteIngestTokenHash(siteId: string) {
+  return queryOne<Pick<Site, "id" | "ingest_token_hash">>(
+    "select id, ingest_token_hash from sites where id = $1",
+    [siteId],
   );
 }
 
@@ -188,6 +266,29 @@ export function listRecentIngestRunsForUser(userId: string, limit = 20) {
   );
 }
 
+export function listRecentIngestRunsForSiteForUser(userId: string, siteId: string, limit = 20) {
+  return query<{
+    id: string;
+    site_id: string;
+    trigger: string;
+    status: string;
+    summary: Record<string, unknown>;
+    started_at: Date;
+    finished_at: Date | null;
+  }>(
+    `
+      select ingest_runs.id, ingest_runs.site_id, ingest_runs.trigger, ingest_runs.status,
+        ingest_runs.summary, ingest_runs.started_at, ingest_runs.finished_at
+      from ingest_runs
+      join sites on sites.id = ingest_runs.site_id
+      where sites.user_id = $1 and sites.id = $2
+      order by ingest_runs.started_at desc
+      limit $3
+    `,
+    [userId, siteId, limit],
+  );
+}
+
 export function listPublishedNotes(limit = 100) {
   return query<Note>(
     `
@@ -218,6 +319,24 @@ export function listPublishedNotesForUser(userId: string, limit = 100) {
   );
 }
 
+export function listPublishedNotesForSiteForUser(userId: string, siteId: string, limit = 100) {
+  return query<Note>(
+    `
+      select notes.*
+      from notes
+      join sites on sites.id = notes.site_id
+      where sites.user_id = $1
+        and sites.id = $2
+        and notes.deleted_at is null
+        and notes.publish is true
+        and notes.parse_error is null
+      order by notes.updated_at desc
+      limit $3
+    `,
+    [userId, siteId, limit],
+  );
+}
+
 export async function listShareLinksForUser(userId: string, limit = 100) {
   const rows = await query<Omit<UserShareLink, "token"> & { token_ciphertext: string | null }>(
     `
@@ -242,6 +361,38 @@ export async function listShareLinksForUser(userId: string, limit = 100) {
       limit $2
     `,
     [userId, limit],
+  );
+
+  return rows.map(({ token_ciphertext: tokenCiphertext, ...row }) => ({
+    ...row,
+    token: decryptShareToken(tokenCiphertext),
+  }));
+}
+
+export async function listShareLinksForSiteForUser(userId: string, siteId: string, limit = 100) {
+  const rows = await query<Omit<UserShareLink, "token"> & { token_ciphertext: string | null }>(
+    `
+      select
+        share_links.id,
+        share_links.site_id,
+        share_links.note_id,
+        notes.title as note_title,
+        notes.path as note_path,
+        notes.slug as note_slug,
+        sites.slug as site_slug,
+        share_links.token_ciphertext,
+        share_links.expires_at,
+        share_links.revoked_at,
+        share_links.created_at,
+        share_links.updated_at
+      from share_links
+      join notes on notes.id = share_links.note_id
+      join sites on sites.id = share_links.site_id
+      where sites.user_id = $1 and sites.id = $2
+      order by share_links.created_at desc
+      limit $3
+    `,
+    [userId, siteId, limit],
   );
 
   return rows.map(({ token_ciphertext: tokenCiphertext, ...row }) => ({

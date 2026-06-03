@@ -1,6 +1,6 @@
 ---
 name: lumenote-publisher
-description: Publish or refresh Lumenote Markdown vault changes from an AI agent by calling the Lumenote ingest API directly. Use when Codex is editing a Tolaria/Markdown vault, applying Lumenote frontmatter, committing/pushing vault changes, manually notifying Lumenote through POST /api/ingest/changed-paths, or troubleshooting direct Lumenote ingest API calls with LUMENOTE_API_URL, LUMENOTE_SITE_ID, and LUMENOTE_INGEST_TOKEN.
+description: Publish or refresh Lumenote Markdown vault changes from an AI agent by calling the Lumenote ingest API directly. Use when Codex is editing a Tolaria/Markdown vault, applying Lumenote frontmatter, committing/pushing vault changes, manually notifying Lumenote through POST /api/ingest/changed-paths, or troubleshooting direct Lumenote ingest API calls with LUMENOTE_API_URL, LUMENOTE_SITE_ID, and LUMENOTE_SITE_TOKEN.
 ---
 
 # Lumenote Publisher
@@ -23,7 +23,7 @@ Set these in the shell or agent environment:
 ```bash
 export LUMENOTE_API_URL="https://your-lumenote-app.example.com"
 export LUMENOTE_SITE_ID="site_xxx"
-export LUMENOTE_INGEST_TOKEN="..."
+export LUMENOTE_SITE_TOKEN="..."
 ```
 
 Optional:
@@ -33,6 +33,7 @@ export LUMENOTE_BRANCH="main"
 ```
 
 Prefer environment variables over command-line token arguments so secrets do not enter shell history.
+`LUMENOTE_INGEST_TOKEN` is accepted only as a legacy fallback for older Lumenote deployments.
 
 ## Direct refresh script
 

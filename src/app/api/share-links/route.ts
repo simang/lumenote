@@ -11,8 +11,16 @@ function wantsJson(request: Request) {
   return contentType.includes("application/json") || accept.includes("application/json");
 }
 
-function dashboardRedirect(request: Request, params: Record<string, string>) {
-  const url = new URL("/dashboard", request.url);
+function safeRedirectPath(path: string | undefined) {
+  if (!path || !path.startsWith("/dashboard")) {
+    return "/dashboard";
+  }
+
+  return path;
+}
+
+function dashboardRedirect(request: Request, params: Record<string, string>, redirectTo?: string) {
+  const url = new URL(safeRedirectPath(redirectTo), request.url);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -41,6 +49,7 @@ async function readPayload(request: Request) {
     return {
       noteId: String(body.note_id ?? body.noteId ?? ""),
       expiresAt: body.expires_at ? parseExpiresAt(String(body.expires_at)) : null,
+      redirectTo: body.redirect_to ? String(body.redirect_to) : undefined,
     };
   }
 
@@ -48,6 +57,7 @@ async function readPayload(request: Request) {
   return {
     noteId: String(form.get("note_id") ?? ""),
     expiresAt: form.get("expires_at") ? parseExpiresAt(String(form.get("expires_at"))) : null,
+    redirectTo: form.get("redirect_to") ? String(form.get("redirect_to")) : undefined,
   };
 }
 
@@ -61,7 +71,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "note_id is required" }, { status: 400 });
     }
 
-    return dashboardRedirect(request, { share_error: "missing_note" });
+    return dashboardRedirect(request, { share_error: "missing_note" }, payload.redirectTo);
   }
 
   const token = randomToken();
@@ -81,5 +91,5 @@ export async function POST(request: Request) {
     });
   }
 
-  return dashboardRedirect(request, { share_link_id: share.id });
+  return dashboardRedirect(request, { share_link_id: share.id }, payload.redirectTo);
 }

@@ -87,11 +87,17 @@ label {
   font-weight: 700;
 }
 
-input {
+input,
+textarea {
   border: 1px solid var(--border);
   border-radius: 10px;
   font: inherit;
   padding: 10px 12px;
+}
+
+textarea {
+  min-height: 110px;
+  resize: vertical;
 }
 
 button,

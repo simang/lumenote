@@ -32,10 +32,30 @@ function shareTokenEncryptionKey() {
   return crypto.createHash("sha256").update(shareTokenSecret()).digest();
 }
 
-export function encryptShareToken(token: string) {
+function ingestTokenSecret() {
+  const secret =
+    optionalEnv("INGEST_TOKEN_ENCRYPTION_SECRET") ??
+    optionalEnv("SHARE_TOKEN_ENCRYPTION_SECRET") ??
+    optionalEnv("AUTH_SESSION_SECRET") ??
+    optionalEnv("ADMIN_SESSION_SECRET") ??
+    optionalEnv("BOOTSTRAP_USER_PASSWORD_HASH") ??
+    optionalEnv("ADMIN_PASSWORD_HASH");
+
+  if (!secret) {
+    throw new Error("INGEST_TOKEN_ENCRYPTION_SECRET or AUTH_SESSION_SECRET is required");
+  }
+
+  return secret;
+}
+
+function ingestTokenEncryptionKey() {
+  return crypto.createHash("sha256").update(ingestTokenSecret()).digest();
+}
+
+function encryptSecretValue(value: string, key: Buffer) {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", shareTokenEncryptionKey(), iv);
-  const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   return [
@@ -46,12 +66,12 @@ export function encryptShareToken(token: string) {
   ].join(":");
 }
 
-export function decryptShareToken(tokenCiphertext: string | null) {
-  if (!tokenCiphertext) {
+function decryptSecretValue(ciphertextValue: string | null, key: Buffer) {
+  if (!ciphertextValue) {
     return null;
   }
 
-  const [version, iv, authTag, ciphertext] = tokenCiphertext.split(":");
+  const [version, iv, authTag, ciphertext] = ciphertextValue.split(":");
   if (version !== "v1" || !iv || !authTag || !ciphertext) {
     return null;
   }
@@ -59,7 +79,7 @@ export function decryptShareToken(tokenCiphertext: string | null) {
   try {
     const decipher = crypto.createDecipheriv(
       "aes-256-gcm",
-      shareTokenEncryptionKey(),
+      key,
       Buffer.from(iv, "base64url"),
     );
     decipher.setAuthTag(Buffer.from(authTag, "base64url"));
@@ -72,6 +92,26 @@ export function decryptShareToken(tokenCiphertext: string | null) {
   } catch {
     return null;
   }
+}
+
+export function encryptShareToken(token: string) {
+  return encryptSecretValue(token, shareTokenEncryptionKey());
+}
+
+export function decryptShareToken(tokenCiphertext: string | null) {
+  return decryptSecretValue(tokenCiphertext, shareTokenEncryptionKey());
+}
+
+export function hashIngestToken(token: string) {
+  return sha256(`ingest:${token}`);
+}
+
+export function encryptIngestToken(token: string) {
+  return encryptSecretValue(token, ingestTokenEncryptionKey());
+}
+
+export function decryptIngestToken(tokenCiphertext: string | null) {
+  return decryptSecretValue(tokenCiphertext, ingestTokenEncryptionKey());
 }
 
 export function stableJson(value: unknown): string {

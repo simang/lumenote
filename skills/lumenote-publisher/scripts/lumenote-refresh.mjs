@@ -10,7 +10,7 @@ function usage() {
 Options:
   --api-url <url>       Defaults to LUMENOTE_API_URL
   --site <site_id>      Defaults to LUMENOTE_SITE_ID
-  --token <token>       Defaults to LUMENOTE_INGEST_TOKEN; prefer env over this flag
+  --token <token>       Defaults to LUMENOTE_SITE_TOKEN, then legacy LUMENOTE_INGEST_TOKEN
   --repo <owner/repo>   Defaults to GITHUB_REPOSITORY or git remote origin
   --branch <branch>     Defaults to LUMENOTE_BRANCH, GITHUB_REF_NAME, or current branch
   --before <rev>        Base git revision to diff from
@@ -144,7 +144,10 @@ async function main() {
 
   const apiUrl = required(options.apiUrl ?? process.env.LUMENOTE_API_URL, "LUMENOTE_API_URL").replace(/\/$/, "");
   const siteId = required(options.site ?? process.env.LUMENOTE_SITE_ID, "LUMENOTE_SITE_ID");
-  const ingestToken = required(options.token ?? process.env.LUMENOTE_INGEST_TOKEN, "LUMENOTE_INGEST_TOKEN");
+  const ingestToken = required(
+    options.token ?? process.env.LUMENOTE_SITE_TOKEN ?? process.env.LUMENOTE_INGEST_TOKEN,
+    "LUMENOTE_SITE_TOKEN",
+  );
   const before = git(["rev-parse", required(options.before ?? process.env.BEFORE, "--before")]);
   const after = git(["rev-parse", required(options.after ?? process.env.AFTER, "--after")]);
   const repositoryFullName = required(

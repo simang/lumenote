@@ -62,6 +62,7 @@ BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
 AUTH_SESSION_SECRET=
 SHARE_TOKEN_ENCRYPTION_SECRET=
+INGEST_TOKEN_ENCRYPTION_SECRET=
 ALLOW_PUBLIC_SIGNUP=false
 
 OBJECT_STORAGE_ENDPOINT=
@@ -75,6 +76,8 @@ OBJECT_STORAGE_BUCKET=
 기존 배포 호환을 위해 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`도 fallback으로 읽습니다. 새 배포에서는 `BOOTSTRAP_USER_EMAIL`, `BOOTSTRAP_USER_PASSWORD_HASH`, `AUTH_SESSION_SECRET`을 사용하세요.
 
 `SHARE_TOKEN_ENCRYPTION_SECRET`은 dashboard에서 생성된 unlisted URL을 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. 기존에 hash만 저장된 share link URL은 복구할 수 없으므로 새 URL을 생성해야 합니다.
+
+`INGEST_TOKEN_ENCRYPTION_SECRET`은 site별 agent ingest token을 dashboard에서 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `SHARE_TOKEN_ENCRYPTION_SECRET` 또는 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. `LUMENOTE_INGEST_TOKEN`은 site token이 아직 발급되지 않은 site를 위한 legacy fallback입니다.
 
 ## DB migration
 
@@ -102,8 +105,9 @@ http://localhost:3000/dashboard
 2. `npm run db:migrate`로 DB schema를 적용합니다.
 3. 최초 사용자는 `BOOTSTRAP_USER_EMAIL`/bootstrap password로 로그인해 user account를 bootstrap합니다.
 4. `/dashboard`에서 GitHub App을 설치하고 repository를 site로 등록합니다.
-5. Dashboard에서 full sync를 실행하거나 CLI로 실행합니다.
-6. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
+5. `/dashboard/sites/{site_id}`에서 site-specific ingest token을 발급합니다.
+6. Dashboard에서 full sync를 실행하거나 CLI로 실행합니다.
+7. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
 
 GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
 
@@ -138,11 +142,12 @@ skills/lumenote-publisher
 
 ```bash
 LUMENOTE_API_URL
-LUMENOTE_INGEST_TOKEN
 LUMENOTE_SITE_ID
+LUMENOTE_SITE_TOKEN
 ```
 
 Skill은 `git diff --name-status {before} {after}`로 Markdown과 supported asset 변경 path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 API payload에 포함하지 않습니다.
+`LUMENOTE_INGEST_TOKEN`은 기존 배포 호환용 fallback으로만 사용합니다.
 
 웹에서는 `/dashboard`의 full sync 버튼으로 사용자가 직접 전체 갱신을 trigger할 수 있습니다.
 
@@ -192,12 +197,14 @@ Publish되지 않은 내부 링크는 public HTML에서 링크를 만들지 않�
 
 ```text
 GET  /dashboard
+GET  /dashboard/sites/{site_id}
 GET  /login
 GET  /signup
 POST /api/auth/login
 POST /api/auth/logout
 POST /api/auth/signup
 POST /api/sites
+POST /api/sites/ingest-token
 POST /api/share-links
 POST /api/share-links/manage
 
