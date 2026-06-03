@@ -209,8 +209,6 @@ GET  /s/{share_token}
 GET  /assets/{site_id}/{source_sha}/{asset_path}
 ```
 
-기존 `/admin` 및 `/api/admin/*` 경로는 호환을 위해 새 dashboard/auth route로 redirect 또는 proxy합니다.
-
 ## 명령어
 
 ```bash
