@@ -13,7 +13,7 @@ import {
 import type { User } from "./types";
 
 const sessionCookieName = "lumenote_session";
-const legacyAdminCookieName = "lumenote_admin";
+const legacySingleUserCookieName = "lumenote_admin";
 const githubInstallStateCookieName = "lumenote_github_install_state";
 const sessionTtlSeconds = 60 * 60 * 24 * 14;
 const githubInstallStateTtlSeconds = 60 * 10;
@@ -25,7 +25,17 @@ type SessionPayload = {
 };
 
 function sessionSecret() {
-  return optionalEnv("ADMIN_SESSION_SECRET") ?? env("ADMIN_PASSWORD_HASH");
+  const secret =
+    optionalEnv("AUTH_SESSION_SECRET") ??
+    optionalEnv("ADMIN_SESSION_SECRET") ??
+    optionalEnv("BOOTSTRAP_USER_PASSWORD_HASH") ??
+    optionalEnv("ADMIN_PASSWORD_HASH");
+
+  if (!secret) {
+    throw new Error("AUTH_SESSION_SECRET is required");
+  }
+
+  return secret;
 }
 
 function sign(value: string) {
@@ -69,9 +79,9 @@ function decodeSession(token: string): SessionPayload | null {
   return payload;
 }
 
-async function bootstrapLegacyAdmin(email: string, password: string) {
-  const configuredEmail = optionalEnv("ADMIN_EMAIL");
-  const configuredHash = optionalEnv("ADMIN_PASSWORD_HASH");
+async function bootstrapConfiguredUser(email: string, password: string) {
+  const configuredEmail = optionalEnv("BOOTSTRAP_USER_EMAIL") ?? optionalEnv("ADMIN_EMAIL");
+  const configuredHash = optionalEnv("BOOTSTRAP_USER_PASSWORD_HASH") ?? optionalEnv("ADMIN_PASSWORD_HASH");
   if (!configuredEmail || !configuredHash || email.toLowerCase() !== configuredEmail.toLowerCase()) {
     return null;
   }
@@ -90,7 +100,7 @@ export async function verifyUserPassword(email: string, password: string) {
     return user;
   }
 
-  return bootstrapLegacyAdmin(normalizedEmail, password);
+  return bootstrapConfiguredUser(normalizedEmail, password);
 }
 
 export async function createPasswordUser(email: string, password: string) {
@@ -119,7 +129,7 @@ export async function createUserSession(user: Pick<User, "id" | "email">) {
 export async function clearUserSession() {
   const cookieStore = await cookies();
   cookieStore.delete(sessionCookieName);
-  cookieStore.delete(legacyAdminCookieName);
+  cookieStore.delete(legacySingleUserCookieName);
   cookieStore.delete(githubInstallStateCookieName);
 }
 
@@ -153,13 +163,11 @@ export async function getUserSession() {
 export async function requireUser() {
   const session = await getUserSession();
   if (!session) {
-    redirect("/admin/login");
+    redirect("/login");
   }
 
   return session;
 }
-
-export const requireAdmin = requireUser;
 
 export async function createGitHubInstallState() {
   const cookieStore = await cookies();

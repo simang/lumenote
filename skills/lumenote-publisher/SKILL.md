@@ -77,7 +77,7 @@ The script filters changes to Markdown and supported assets:
 
 - The `after` SHA must exist in the GitHub repository and be reachable from the configured branch.
 - Uncommitted local changes cannot be ingested because Lumenote reads from GitHub.
-- If this is the first connection for a site, run a full sync from Lumenote admin before relying on changed-path ingest.
+- If this is the first connection for a site, run a full sync from the Lumenote dashboard before relying on changed-path ingest.
 - If multiple commits need syncing, pass the oldest unsynced base SHA as `--before` and the latest pushed SHA as `--after`.
 - If the working tree is dirty, commit first. Use `--allow-dirty` only when intentionally refreshing already-pushed commits.
 

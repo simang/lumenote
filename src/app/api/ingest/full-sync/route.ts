@@ -37,12 +37,12 @@ export async function POST(request: Request) {
   const result = await runFullSync({
     siteId: payload.siteId,
     ref: payload.ref,
-    trigger: "admin_full_sync",
+    trigger: "dashboard_full_sync",
   });
 
   if ((request.headers.get("content-type") ?? "").includes("application/json")) {
     return Response.json(result);
   }
 
-  return Response.redirect(new URL("/admin", request.url), 303);
+  return Response.redirect(new URL("/dashboard", request.url), 303);
 }

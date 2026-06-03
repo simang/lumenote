@@ -317,7 +317,7 @@ export async function createIngestRun(
   input: {
     id: string;
     siteId: string;
-    trigger: "agent_api" | "github_action" | "admin_full_sync" | "manual";
+    trigger: "agent_api" | "github_action" | "dashboard_full_sync" | "admin_full_sync" | "manual";
     beforeSha?: string | null;
     afterSha: string;
     idempotencyKey?: string | null;

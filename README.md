@@ -21,13 +21,13 @@ AI agent가 vault frontmatter를 수정하거나 직접 ingest API를 호출할 
 - Supabase/Postgres 호환 DB schema와 migration
 - GitHub App installation token 기반 repository file fetch
 - Agent/API changed-path ingestion API
-- Admin password session
+- User password session
 - Markdown/frontmatter/wikilink parser
 - Sanitized HTML materialized note store
 - Public route: `/p/{site_slug}/{note_slug}`
 - Share route: `/s/{share_token}`
 - Asset proxy route: `/assets/{site_id}/{source_sha}/{asset_path}`
-- Minimal admin dashboard, full sync, share-link generation
+- User dashboard, full sync, share-link generation
 
 ## 요구사항
 
@@ -58,9 +58,9 @@ GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_WEBHOOK_SECRET=
 LUMENOTE_INGEST_TOKEN=
 
-ADMIN_EMAIL=
-ADMIN_PASSWORD_HASH=
-ADMIN_SESSION_SECRET=
+BOOTSTRAP_USER_EMAIL=
+BOOTSTRAP_USER_PASSWORD_HASH=
+AUTH_SESSION_SECRET=
 ALLOW_PUBLIC_SIGNUP=false
 
 OBJECT_STORAGE_ENDPOINT=
@@ -69,7 +69,9 @@ OBJECT_STORAGE_SECRET_ACCESS_KEY=
 OBJECT_STORAGE_BUCKET=
 ```
 
-`ADMIN_PASSWORD_HASH`는 bcrypt hash여야 합니다. raw password는 저장하지 않습니다. 기존 단일 admin env는 첫 사용자 bootstrap login에 사용됩니다. 추가 사용자 가입은 `ALLOW_PUBLIC_SIGNUP=true`일 때만 허용됩니다.
+`BOOTSTRAP_USER_PASSWORD_HASH`는 bcrypt hash여야 합니다. raw password는 저장하지 않습니다. 최초 사용자 bootstrap login에 사용됩니다. 추가 사용자 가입은 `ALLOW_PUBLIC_SIGNUP=true`일 때만 허용됩니다.
+
+기존 배포 호환을 위해 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`도 fallback으로 읽습니다. 새 배포에서는 `BOOTSTRAP_USER_EMAIL`, `BOOTSTRAP_USER_PASSWORD_HASH`, `AUTH_SESSION_SECRET`을 사용하세요.
 
 ## DB migration
 
@@ -85,19 +87,19 @@ Migration은 `db/migrations` 아래 SQL 파일을 순서대로 적용합니다.
 npm run dev
 ```
 
-Admin UI는 다음 경로에서 접근합니다.
+Dashboard는 다음 경로에서 접근합니다.
 
 ```text
-http://localhost:3000/admin
+http://localhost:3000/dashboard
 ```
 
 ## 기본 운영 흐름
 
-1. `.env`에 GitHub App, DB, admin 값을 설정합니다.
+1. `.env`에 GitHub App, DB, auth 값을 설정합니다.
 2. `npm run db:migrate`로 DB schema를 적용합니다.
-3. 최초 사용자는 `ADMIN_EMAIL`/admin password로 로그인해 user account를 bootstrap합니다.
-4. `/admin`에서 GitHub App을 설치하고 repository를 site로 등록합니다.
-5. Admin UI에서 full sync를 실행하거나 CLI로 실행합니다.
+3. 최초 사용자는 `BOOTSTRAP_USER_EMAIL`/bootstrap password로 로그인해 user account를 bootstrap합니다.
+4. `/dashboard`에서 GitHub App을 설치하고 repository를 site로 등록합니다.
+5. Dashboard에서 full sync를 실행하거나 CLI로 실행합니다.
 6. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
 
 GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
@@ -110,7 +112,7 @@ GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
 
 ## Full sync
 
-Admin UI에서 실행하거나 CLI로 실행할 수 있습니다.
+Dashboard에서 실행하거나 CLI로 실행할 수 있습니다.
 
 ```bash
 npm run ingest:full -- --site site_123
@@ -139,7 +141,7 @@ LUMENOTE_SITE_ID
 
 Skill은 `git diff --name-status {before} {after}`로 Markdown과 supported asset 변경 path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 API payload에 포함하지 않습니다.
 
-웹에서는 `/admin`의 full sync 버튼으로 사용자가 직접 전체 갱신을 trigger할 수 있습니다.
+웹에서는 `/dashboard`의 full sync 버튼으로 사용자가 직접 전체 갱신을 trigger할 수 있습니다.
 
 ## Frontmatter
 
@@ -186,11 +188,14 @@ Publish되지 않은 내부 링크는 public HTML에서 링크를 만들지 않�
 ## 주요 route
 
 ```text
-GET  /admin
-POST /api/admin/login
-POST /api/admin/logout
-POST /api/admin/sites
-POST /api/admin/share-links
+GET  /dashboard
+GET  /login
+GET  /signup
+POST /api/auth/login
+POST /api/auth/logout
+POST /api/auth/signup
+POST /api/sites
+POST /api/share-links
 
 POST /api/ingest/changed-paths
 POST /api/ingest/full-sync
@@ -199,6 +204,8 @@ GET  /p/{site_slug}/{note_slug}
 GET  /s/{share_token}
 GET  /assets/{site_id}/{source_sha}/{asset_path}
 ```
+
+기존 `/admin` 및 `/api/admin/*` 경로는 호환을 위해 새 dashboard/auth route로 redirect 또는 proxy합니다.
 
 ## 명령어
 

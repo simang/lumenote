@@ -4,7 +4,7 @@
 
 이 문서는 Lumenote MVP의 구현 설계를 정의한다. 제품 요구사항은 [`SPEC.md`](SPEC.md)가 기준이고, 이 문서는 실제 앱을 어떤 컴포넌트와 데이터 흐름으로 만들지 결정한다.
 
-현재 MVP는 단일 사용자 운영을 전제로 한다. Vercel은 Lumenote 앱 자체를 호스팅하는 플랫폼으로 사용하고, 사용자별 Vercel 권한 위임이나 site별 Vercel 배포는 MVP에서 제외한다.
+현재 MVP는 하나의 Lumenote 배포에서 여러 사용자가 각자의 GitHub App installation과 site를 등록하는 멀티 테넌트 운영을 전제로 한다. Vercel은 Lumenote 앱 자체를 호스팅하는 플랫폼으로 사용하고, 사용자별 Vercel 권한 위임이나 site별 Vercel 배포는 MVP에서 제외한다.
 
 ## 핵심 결정
 
@@ -12,21 +12,21 @@
 |---|---|
 | 앱 호스팅 | Vercel에 Lumenote Next.js 앱을 1개 배포 |
 | vault 접근 | GitHub App installation token으로 repository contents read |
-| 업데이트 트리거 | Admin full sync 또는 AI agent/API client가 changed paths를 Lumenote API에 전달 |
+| 업데이트 트리거 | Dashboard full sync 또는 AI agent/API client가 changed paths를 Lumenote API에 전달 |
 | 파일 내용 전달 | ingest trigger는 파일 내용을 보내지 않고 path/status/commit만 보낸다 |
 | 노트 serving | Lumenote 앱이 materialized note store에서 직접 제공 |
 | Vercel OAuth | MVP 제외 |
-| 사용자 모델 | 단일 admin 사용자 |
+| 사용자 모델 | password auth 사용자 + 사용자별 site ownership |
 | 공개 URL | MVP는 path-based URL, 이후 subdomain/custom domain |
 | 저장소 | Supabase Postgres + Supabase Storage |
-| Admin auth | 단일 admin password session |
+| Auth | password session, optional public signup, bootstrap user env |
 | Render store | sanitized HTML materialization |
 
 ## 전체 구조
 
 ```text
 Tolaria vault repository
-  -> User/admin sync trigger or AI agent/API trigger
+  -> User dashboard sync trigger or AI agent/API trigger
   -> POST /api/ingest/full-sync or POST /api/ingest/changed-paths
   -> Lumenote ingestion service
   -> GitHub App reads changed files at commit SHA
@@ -41,7 +41,7 @@ Tolaria vault repository
 ### Next.js app
 
 - App Router 기반으로 구현한다.
-- `/api/*`는 ingestion, admin, internal API를 담당한다.
+- `/api/*`는 ingestion, auth, user-owned resource API를 담당한다.
 - public page route는 DB에 저장된 렌더링 결과를 읽어 응답한다.
 - Markdown parsing/rendering은 request path에서 직접 수행하지 않고 ingestion 단계에서 materialize한다.
 
@@ -94,14 +94,16 @@ https://notes.example.com/{note_slug}
 예약 path:
 
 - `/api`
-- `/admin`
+- `/dashboard`
+- `/login`
+- `/signup`
 - `/p`
 - `/s`
 - `/_next`
 
-## Admin UI
+## Dashboard UI
 
-MVP admin UI는 제품형 onboarding보다 운영 도구에 가깝게 만든다.
+MVP dashboard UI는 제품형 onboarding보다 운영 도구에 가깝게 만든다.
 
 필요 화면:
 
@@ -115,12 +117,14 @@ MVP admin UI는 제품형 onboarding보다 운영 도구에 가깝게 만든다.
 - slug conflict, parse error, missing asset 목록
 - generated URL 복사
 
-MVP admin 인증:
+MVP 인증:
 
-- 단일 admin 계정만 지원한다.
-- `ADMIN_EMAIL`과 `ADMIN_PASSWORD_HASH` 기반 password session을 사용한다.
+- 사용자는 password session으로 로그인한다.
+- 최초 사용자 bootstrap에는 `BOOTSTRAP_USER_EMAIL`과 `BOOTSTRAP_USER_PASSWORD_HASH`를 사용한다.
+- `ALLOW_PUBLIC_SIGNUP=true`이면 공개 가입을 허용한다.
 - session cookie는 `HttpOnly`, `Secure`, `SameSite=Lax`로 설정한다.
-- public route와 admin route는 명확히 분리한다.
+- public route와 dashboard route는 명확히 분리한다.
+- 기존 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`은 legacy fallback으로만 지원한다.
 
 ## GitHub 연동
 
@@ -132,7 +136,7 @@ MVP admin 인증:
 - Repository contents: read-only
 - Webhooks: optional for later managed mode
 
-MVP에서는 GitHub webhook이나 repo-local 자동화 파일을 기본 경로로 사용하지 않는다. GitHub App은 파일 내용을 안전하게 읽기 위해 필요하고, 업데이트는 admin full sync 또는 AI agent/API trigger로 시작한다.
+MVP에서는 GitHub webhook이나 repo-local 자동화 파일을 기본 경로로 사용하지 않는다. GitHub App은 파일 내용을 안전하게 읽기 위해 필요하고, 업데이트는 dashboard full sync 또는 AI agent/API trigger로 시작한다.
 
 저장해야 하는 값:
 
@@ -156,7 +160,7 @@ Trigger client의 역할:
 4. repository owner, repo, branch, before SHA, after SHA를 payload에 포함
 5. payload를 `POST /api/ingest/changed-paths`로 전송
 
-공식 agent 경로는 `skills/lumenote-publisher` skill이다. 사용자가 웹에서 직접 갱신하려면 admin UI의 full sync action을 사용한다.
+공식 agent 경로는 `skills/lumenote-publisher` skill이다. 사용자가 웹에서 직접 갱신하려면 dashboard UI의 full sync action을 사용한다.
 
 ## Ingestion API
 
@@ -213,7 +217,7 @@ Validation:
 
 ### POST `/api/ingest/full-sync`
 
-Admin UI에서 호출한다.
+Dashboard UI에서 호출한다.
 
 Request:
 
@@ -407,7 +411,7 @@ Backlink는 HTML에 고정으로 bake하지 않고 `note_links` 테이블에서 
 ### Private
 
 - MVP에서는 public serving에서 제외한다.
-- admin preview는 별도 route에서만 제공한다.
+- owner preview는 별도 route에서만 제공한다.
 
 ### Protected later
 
@@ -557,7 +561,7 @@ site_id, target_note_id
 |---|---|---|
 | `id` | text pk | `run_` prefix |
 | `site_id` | text |  |
-| `trigger` | text | `agent_api`, `admin_full_sync`, `manual`; `github_action` is legacy |
+| `trigger` | text | `agent_api`, `dashboard_full_sync`, `manual`; `github_action` and `admin_full_sync` are legacy |
 | `before_sha` | text null |  |
 | `after_sha` | text |  |
 | `status` | text | `accepted`, `running`, `completed`, `failed` |
@@ -611,7 +615,7 @@ Example:
 Ingestion error는 가능한 한 site 전체 publish를 막지 않는다.
 
 - 한 note parse 실패: 해당 note만 `parse_error` 기록
-- slug conflict: 충돌 note들을 unpublished 상태로 두고 admin에 표시
+- slug conflict: 충돌 note들을 unpublished 상태로 두고 dashboard에 표시
 - missing asset: note는 publish하되 missing asset placeholder 표시
 - GitHub fetch 실패: ingest run failed, 기존 published content 유지
 - DB write 실패: ingest run failed, partial write는 transaction으로 rollback
@@ -637,8 +641,9 @@ GITHUB_APP_ID=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_WEBHOOK_SECRET=
 LUMENOTE_INGEST_TOKEN=
-ADMIN_EMAIL=
-ADMIN_PASSWORD_HASH=
+BOOTSTRAP_USER_EMAIL=
+BOOTSTRAP_USER_PASSWORD_HASH=
+AUTH_SESSION_SECRET=
 OBJECT_STORAGE_ENDPOINT=
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=
@@ -678,9 +683,9 @@ fixtures/vault/frontmatter
 7. GitHub App installation token client
 8. changed-path ingestion API
 9. Lumenote publisher agent skill
-10. full sync admin action
+10. dashboard full sync action
 11. asset storage/proxy
-12. admin UI
+12. dashboard UI
 13. share link
 
 ## 남은 결정

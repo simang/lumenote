@@ -52,7 +52,7 @@ export type ChangedPathsInput = {
   changes: ChangedPath[];
 };
 
-type IngestTrigger = "agent_api" | "github_action" | "admin_full_sync" | "manual";
+type IngestTrigger = "agent_api" | "github_action" | "dashboard_full_sync" | "admin_full_sync" | "manual";
 
 type ParsedPendingNote = {
   draft: ParsedNoteDraft;
