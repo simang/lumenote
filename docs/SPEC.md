@@ -255,9 +255,11 @@ GitHub Repository
 - `id`
 - `note_id`
 - `token_hash`
+- `token_ciphertext`
 - `expires_at`
 - `password_hash`
 - `created_at`
+- `updated_at`
 - `revoked_at`
 
 ### Asset
@@ -325,7 +327,7 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 2. Dashboard full sync와 Agent/API 기반 changed-path trigger
 3. frontmatter `lumenote.publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
-5. `unlisted` share link 생성
+5. `unlisted` share link 생성, 복사, 만료, 폐기
 6. wikilink 기본 변환
 7. 이미지 asset serving
 8. path-based URL

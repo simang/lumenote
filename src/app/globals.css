@@ -50,6 +50,10 @@ main {
   gap: 20px;
 }
 
+.stack.compact {
+  gap: 8px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -109,6 +113,42 @@ button.secondary,
 .button.secondary {
   background: var(--accent-weak);
   color: var(--accent);
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.danger-button {
+  color: var(--danger);
+}
+
+.inline-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-form input {
+  min-width: 220px;
+}
+
+.status-active {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.status-expired {
+  background: #fff4e5;
+  color: #8a4b00;
+}
+
+.status-revoked {
+  background: #ffe8e5;
+  color: var(--danger);
 }
 
 table {

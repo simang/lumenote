@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { hashShareToken } from "./crypto";
+import { decryptShareToken, hashShareToken } from "./crypto";
 import { query, queryOne } from "./db";
 import { newId } from "./ids";
 import type { GitHubInstallation, Note, NoteLink, Site, SourceFile, User, Visibility } from "./types";
@@ -13,6 +13,21 @@ export type UpsertSiteInput = {
   repo: string;
   branch: string;
   githubInstallationId: string;
+};
+
+export type UserShareLink = {
+  id: string;
+  site_id: string;
+  note_id: string;
+  note_title: string;
+  note_path: string;
+  note_slug: string;
+  site_slug: string;
+  token: string | null;
+  expires_at: Date | null;
+  revoked_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 };
 
 export function countUsers() {
@@ -201,6 +216,38 @@ export function listPublishedNotesForUser(userId: string, limit = 100) {
     `,
     [userId, limit],
   );
+}
+
+export async function listShareLinksForUser(userId: string, limit = 100) {
+  const rows = await query<Omit<UserShareLink, "token"> & { token_ciphertext: string | null }>(
+    `
+      select
+        share_links.id,
+        share_links.site_id,
+        share_links.note_id,
+        notes.title as note_title,
+        notes.path as note_path,
+        notes.slug as note_slug,
+        sites.slug as site_slug,
+        share_links.token_ciphertext,
+        share_links.expires_at,
+        share_links.revoked_at,
+        share_links.created_at,
+        share_links.updated_at
+      from share_links
+      join notes on notes.id = share_links.note_id
+      join sites on sites.id = share_links.site_id
+      where sites.user_id = $1
+      order by share_links.created_at desc
+      limit $2
+    `,
+    [userId, limit],
+  );
+
+  return rows.map(({ token_ciphertext: tokenCiphertext, ...row }) => ({
+    ...row,
+    token: decryptShareToken(tokenCiphertext),
+  }));
 }
 
 export function findPublicNote(siteId: string, slug: string) {
@@ -574,7 +621,14 @@ export async function findAssetForRequest(siteId: string, sourceRef: string, ass
   );
 }
 
-export async function createShareLink(noteId: string, tokenHash: string) {
+export async function createShareLink(
+  noteId: string,
+  input: {
+    tokenHash: string;
+    tokenCiphertext?: string | null;
+    expiresAt?: Date | null;
+  },
+) {
   const note = await queryOne<Pick<Note, "site_id" | "visibility" | "publish" | "deleted_at">>(
     "select site_id, visibility, publish, deleted_at from notes where id = $1",
     [noteId],
@@ -586,11 +640,18 @@ export async function createShareLink(noteId: string, tokenHash: string) {
 
   const row = await queryOne<{ id: string; site_id: string }>(
     `
-      insert into share_links(id, site_id, note_id, token_hash)
-      values ($1, $2, $3, $4)
+      insert into share_links(id, site_id, note_id, token_hash, token_ciphertext, expires_at)
+      values ($1, $2, $3, $4, $5, $6)
       returning id, site_id
     `,
-    [newId("share"), note.site_id, noteId, tokenHash],
+    [
+      newId("share"),
+      note.site_id,
+      noteId,
+      input.tokenHash,
+      input.tokenCiphertext ?? null,
+      input.expiresAt ?? null,
+    ],
   );
 
   if (!row) {
@@ -600,7 +661,15 @@ export async function createShareLink(noteId: string, tokenHash: string) {
   return row;
 }
 
-export async function createShareLinkForUser(userId: string, noteId: string, tokenHash: string) {
+export async function createShareLinkForUser(
+  userId: string,
+  noteId: string,
+  input: {
+    tokenHash: string;
+    tokenCiphertext?: string | null;
+    expiresAt?: Date | null;
+  },
+) {
   const note = await queryOne<Pick<Note, "site_id" | "visibility" | "publish" | "deleted_at">>(
     `
       select notes.site_id, notes.visibility, notes.publish, notes.deleted_at
@@ -617,15 +686,68 @@ export async function createShareLinkForUser(userId: string, noteId: string, tok
 
   const row = await queryOne<{ id: string; site_id: string }>(
     `
-      insert into share_links(id, site_id, note_id, token_hash)
-      values ($1, $2, $3, $4)
+      insert into share_links(id, site_id, note_id, token_hash, token_ciphertext, expires_at)
+      values ($1, $2, $3, $4, $5, $6)
       returning id, site_id
     `,
-    [newId("share"), note.site_id, noteId, tokenHash],
+    [
+      newId("share"),
+      note.site_id,
+      noteId,
+      input.tokenHash,
+      input.tokenCiphertext ?? null,
+      input.expiresAt ?? null,
+    ],
   );
 
   if (!row) {
     throw new Error("Failed to create share link");
+  }
+
+  return row;
+}
+
+export async function updateShareLinkExpiryForUser(
+  userId: string,
+  shareLinkId: string,
+  expiresAt: Date | null,
+) {
+  const row = await queryOne<{ id: string }>(
+    `
+      update share_links
+      set expires_at = $3
+      from sites
+      where share_links.id = $1
+        and share_links.site_id = sites.id
+        and sites.user_id = $2
+      returning share_links.id
+    `,
+    [shareLinkId, userId, expiresAt],
+  );
+
+  if (!row) {
+    throw new Error("Share link not found");
+  }
+
+  return row;
+}
+
+export async function revokeShareLinkForUser(userId: string, shareLinkId: string) {
+  const row = await queryOne<{ id: string }>(
+    `
+      update share_links
+      set revoked_at = coalesce(revoked_at, now())
+      from sites
+      where share_links.id = $1
+        and share_links.site_id = sites.id
+        and sites.user_id = $2
+      returning share_links.id
+    `,
+    [shareLinkId, userId],
+  );
+
+  if (!row) {
+    throw new Error("Share link not found");
   }
 
   return row;

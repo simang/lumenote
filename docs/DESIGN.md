@@ -551,9 +551,11 @@ site_id, target_note_id
 | `site_id` | text |  |
 | `note_id` | text |  |
 | `token_hash` | text unique | never store raw token |
-| `expires_at` | timestamptz null | later |
+| `token_ciphertext` | text null | encrypted token for dashboard copy; old links may be null |
+| `expires_at` | timestamptz null |  |
 | `revoked_at` | timestamptz null |  |
 | `created_at` | timestamptz |  |
+| `updated_at` | timestamptz |  |
 
 ### `ingest_runs`
 
@@ -629,7 +631,8 @@ Ingestion error는 가능한 한 site 전체 publish를 막지 않는다.
 - Markdown HTML은 sanitize한다.
 - raw HTML 허용 여부는 기본 false로 둔다.
 - private/unpublished note의 title/path/frontmatter가 public output에 새지 않게 한다.
-- share token은 raw value를 한 번만 보여주고 DB에는 hash만 저장한다.
+- share token은 조회 검증용 hash를 저장하고, dashboard 재복사를 위해 별도 ciphertext로 암호화 저장한다.
+- 기존 hash-only link는 URL 복구가 불가능하므로 새 link를 생성해야 한다.
 
 ## 배포 설정
 
@@ -644,6 +647,7 @@ LUMENOTE_INGEST_TOKEN=
 BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
 AUTH_SESSION_SECRET=
+SHARE_TOKEN_ENCRYPTION_SECRET=
 OBJECT_STORAGE_ENDPOINT=
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=

@@ -27,7 +27,7 @@ AI agent가 vault frontmatter를 수정하거나 직접 ingest API를 호출할 
 - Public route: `/p/{site_slug}/{note_slug}`
 - Share route: `/s/{share_token}`
 - Asset proxy route: `/assets/{site_id}/{source_sha}/{asset_path}`
-- User dashboard, full sync, share-link generation
+- User dashboard, full sync, share-link generation and revocation
 
 ## 요구사항
 
@@ -61,6 +61,7 @@ LUMENOTE_INGEST_TOKEN=
 BOOTSTRAP_USER_EMAIL=
 BOOTSTRAP_USER_PASSWORD_HASH=
 AUTH_SESSION_SECRET=
+SHARE_TOKEN_ENCRYPTION_SECRET=
 ALLOW_PUBLIC_SIGNUP=false
 
 OBJECT_STORAGE_ENDPOINT=
@@ -72,6 +73,8 @@ OBJECT_STORAGE_BUCKET=
 `BOOTSTRAP_USER_PASSWORD_HASH`는 bcrypt hash여야 합니다. raw password는 저장하지 않습니다. 최초 사용자 bootstrap login에 사용됩니다. 추가 사용자 가입은 `ALLOW_PUBLIC_SIGNUP=true`일 때만 허용됩니다.
 
 기존 배포 호환을 위해 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`도 fallback으로 읽습니다. 새 배포에서는 `BOOTSTRAP_USER_EMAIL`, `BOOTSTRAP_USER_PASSWORD_HASH`, `AUTH_SESSION_SECRET`을 사용하세요.
+
+`SHARE_TOKEN_ENCRYPTION_SECRET`은 dashboard에서 생성된 unlisted URL을 다시 보여주기 위한 암호화 키입니다. 설정하지 않으면 `AUTH_SESSION_SECRET`을 fallback으로 사용합니다. 기존에 hash만 저장된 share link URL은 복구할 수 없으므로 새 URL을 생성해야 합니다.
 
 ## DB migration
 
@@ -196,6 +199,7 @@ POST /api/auth/logout
 POST /api/auth/signup
 POST /api/sites
 POST /api/share-links
+POST /api/share-links/manage
 
 POST /api/ingest/changed-paths
 POST /api/ingest/full-sync
@@ -232,7 +236,7 @@ npm audit
 - Ingest API payload에는 파일 내용을 포함하지 않습니다.
 - Ingest API는 bearer token을 검증합니다.
 - Markdown HTML은 sanitize 후 저장합니다.
-- Unlisted share token은 raw value를 DB에 저장하지 않고 hash만 저장합니다.
+- Unlisted share token은 조회용 hash와 dashboard 복구용 encrypted token으로 저장합니다.
 - Unpublished/private note의 링크는 public output에서 활성 링크로 노출하지 않습니다.
 
 ## MVP 이후 작업
