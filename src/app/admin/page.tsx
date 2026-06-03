@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { listInstallationRepositories } from "@/lib/github";
 import {
@@ -51,18 +52,29 @@ function slugFromRepo(repo: string) {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ github_error?: string; installation_id?: string }>;
+  searchParams: Promise<{ github_error?: string; installation_id?: string; state?: string }>;
 }) {
   const user = await requireUser();
   await claimOrphanSitesForUser(user.id);
 
   const params = await searchParams;
+  if (params.installation_id && params.state) {
+    redirect(
+      `/api/github/installations/callback?installation_id=${encodeURIComponent(
+        params.installation_id,
+      )}&state=${encodeURIComponent(params.state)}`,
+    );
+  }
+
   const [sites, notes, runs, installations] = await Promise.all([
     listSitesForUser(user.id),
     listPublishedNotesForUser(user.id),
     listRecentIngestRunsForUser(user.id),
     listGitHubInstallationsForUser(user.id),
   ]);
+  const connectedInstallation = params.installation_id
+    ? installations.find((installation) => installation.github_installation_id === params.installation_id)
+    : null;
   const installedRepositories = await listInstalledRepositories(
     installations.map((installation) => installation.github_installation_id),
   );
@@ -88,9 +100,15 @@ export default async function AdminPage({
           <p className="danger">GitHub install failed: {params.github_error}</p>
         </section>
       ) : null}
-      {params.installation_id ? (
+      {connectedInstallation ? (
         <section className="card stack">
-          <p className="muted">GitHub App installation connected: {params.installation_id}</p>
+          <p className="muted">GitHub App installation connected: {connectedInstallation.github_installation_id}</p>
+        </section>
+      ) : params.installation_id ? (
+        <section className="card stack">
+          <p className="danger">
+            GitHub returned installation {params.installation_id}, but it was not saved. Use Connect GitHub again or set the GitHub App Setup URL to the callback URL.
+          </p>
         </section>
       ) : null}
 
