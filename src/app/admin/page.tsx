@@ -192,8 +192,12 @@ export default async function AdminPage({
         )}
       </section>
 
-      <section className="card stack">
-        <h2>Manual site settings</h2>
+      <details className="card stack">
+        <summary>Advanced manual site setup</summary>
+        <p className="muted">
+          Use this only when the installed repository list is unavailable or you need to edit an
+          existing site id directly.
+        </p>
         <form action="/api/admin/sites" method="post">
           <label>
             Existing site id
@@ -225,7 +229,7 @@ export default async function AdminPage({
           </label>
           <button type="submit">Save site</button>
         </form>
-      </section>
+      </details>
 
       <section className="card stack">
         <h2>Sites</h2>
