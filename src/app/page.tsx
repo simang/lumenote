@@ -11,7 +11,7 @@ export default function HomePage() {
         </p>
         <div className="row">
           <Link className="button" href="/admin">
-            Admin
+            Dashboard
           </Link>
           <Link className="button secondary" href="/admin/login">
             Login

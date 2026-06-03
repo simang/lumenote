@@ -1,6 +1,6 @@
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
-import { env } from "./config";
+import { env, optionalEnv } from "./config";
 import type { Site } from "./types";
 
 function privateKey() {
@@ -19,6 +19,50 @@ export async function githubForInstallation(installationId: string) {
   return new Octokit({
     auth: installationAuthentication.token,
   });
+}
+
+export function githubAppInstallUrl(state: string) {
+  const configured = optionalEnv("GITHUB_APP_INSTALL_URL");
+  if (configured) {
+    const url = new URL(configured);
+    url.searchParams.set("state", state);
+    return url.toString();
+  }
+
+  const slug = optionalEnv("GITHUB_APP_SLUG");
+  if (!slug) {
+    throw new Error("GITHUB_APP_SLUG or GITHUB_APP_INSTALL_URL is required");
+  }
+
+  const url = new URL(`https://github.com/apps/${slug}/installations/new`);
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+export async function listInstallationRepositories(installationId: string) {
+  const octokit = await githubForInstallation(installationId);
+  const repositories = await octokit.paginate("GET /installation/repositories", {
+    per_page: 100,
+  });
+
+  return repositories.map((repo) => ({
+    owner: repo.owner.login,
+    repo: repo.name,
+    fullName: repo.full_name,
+    defaultBranch: repo.default_branch,
+    private: repo.private,
+  }));
+}
+
+export async function getInstallationAccount(installationId: string) {
+  const repositories = await listInstallationRepositories(installationId);
+  const first = repositories[0];
+
+  return {
+    accountLogin: first?.owner ?? null,
+    accountType: null,
+    repositorySelection: null,
+  };
 }
 
 export async function assertCommitOnBranch(site: Site, sha: string) {

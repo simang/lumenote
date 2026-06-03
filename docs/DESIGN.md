@@ -422,11 +422,35 @@ MVP 이후 추가 후보:
 
 ## Data model
 
+### `users`
+
+| column | type | note |
+|---|---|---|
+| `id` | text pk | `user_` prefix |
+| `email` | text unique | login email |
+| `password_hash` | text | bcrypt hash |
+| `created_at` | timestamptz |  |
+| `updated_at` | timestamptz |  |
+
+### `github_installations`
+
+| column | type | note |
+|---|---|---|
+| `id` | text pk | `install_` prefix |
+| `user_id` | text | owner user |
+| `github_installation_id` | text unique | GitHub App installation |
+| `account_login` | text null | GitHub account login |
+| `account_type` | text null | future metadata |
+| `repository_selection` | text null | future metadata |
+| `created_at` | timestamptz |  |
+| `updated_at` | timestamptz |  |
+
 ### `sites`
 
 | column | type | note |
 |---|---|---|
 | `id` | text pk | `site_` prefix |
+| `user_id` | text | owner user |
 | `slug` | text unique | public URL segment |
 | `name` | text | display name |
 | `owner` | text | GitHub owner |
@@ -533,7 +557,7 @@ site_id, target_note_id
 |---|---|---|
 | `id` | text pk | `run_` prefix |
 | `site_id` | text |  |
-| `trigger` | text | `github_action`, `admin_full_sync`, `manual` |
+| `trigger` | text | `agent_api`, `admin_full_sync`, `manual`; `github_action` is legacy |
 | `before_sha` | text null |  |
 | `after_sha` | text |  |
 | `status` | text | `accepted`, `running`, `completed`, `failed` |

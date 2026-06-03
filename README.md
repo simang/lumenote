@@ -52,6 +52,8 @@ DATABASE_URL=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 GITHUB_APP_ID=
+GITHUB_APP_SLUG=
+GITHUB_APP_INSTALL_URL=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_WEBHOOK_SECRET=
 LUMENOTE_INGEST_TOKEN=
@@ -59,6 +61,7 @@ LUMENOTE_INGEST_TOKEN=
 ADMIN_EMAIL=
 ADMIN_PASSWORD_HASH=
 ADMIN_SESSION_SECRET=
+ALLOW_PUBLIC_SIGNUP=false
 
 OBJECT_STORAGE_ENDPOINT=
 OBJECT_STORAGE_ACCESS_KEY_ID=
@@ -66,7 +69,7 @@ OBJECT_STORAGE_SECRET_ACCESS_KEY=
 OBJECT_STORAGE_BUCKET=
 ```
 
-`ADMIN_PASSWORD_HASH`는 bcrypt hash여야 합니다. raw password는 저장하지 않습니다.
+`ADMIN_PASSWORD_HASH`는 bcrypt hash여야 합니다. raw password는 저장하지 않습니다. 기존 단일 admin env는 첫 사용자 bootstrap login에 사용됩니다. 추가 사용자 가입은 `ALLOW_PUBLIC_SIGNUP=true`일 때만 허용됩니다.
 
 ## DB migration
 
@@ -90,12 +93,20 @@ http://localhost:3000/admin
 
 ## 기본 운영 흐름
 
-1. GitHub App을 vault repository에 설치합니다.
-2. `.env`에 GitHub App, DB, admin 값을 설정합니다.
-3. `npm run db:migrate`로 DB schema를 적용합니다.
-4. `/admin`에서 site 설정을 저장합니다.
+1. `.env`에 GitHub App, DB, admin 값을 설정합니다.
+2. `npm run db:migrate`로 DB schema를 적용합니다.
+3. 최초 사용자는 `ADMIN_EMAIL`/admin password로 로그인해 user account를 bootstrap합니다.
+4. `/admin`에서 GitHub App을 설치하고 repository를 site로 등록합니다.
 5. Admin UI에서 full sync를 실행하거나 CLI로 실행합니다.
 6. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
+
+GitHub App 설정의 Setup URL은 다음 경로로 지정합니다.
+
+```text
+{NEXT_PUBLIC_APP_URL}/api/github/installations/callback
+```
+
+`GITHUB_APP_SLUG`는 `https://github.com/apps/{slug}`의 `{slug}` 값입니다. 직접 install URL을 쓰고 싶으면 `GITHUB_APP_INSTALL_URL`을 설정합니다.
 
 ## Full sync
 

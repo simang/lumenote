@@ -1,24 +1,80 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
-import { listPublishedNotes, listRecentIngestRuns, listSites } from "@/lib/repositories";
+import { requireUser } from "@/lib/auth";
+import { listInstallationRepositories } from "@/lib/github";
+import {
+  claimOrphanSitesForUser,
+  listGitHubInstallationsForUser,
+  listPublishedNotesForUser,
+  listRecentIngestRunsForUser,
+  listSitesForUser,
+} from "@/lib/repositories";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
-  await requireAdmin();
-  const [sites, notes, runs] = await Promise.all([
-    listSites(),
-    listPublishedNotes(),
-    listRecentIngestRuns(),
+type InstalledRepository = {
+  installationId: string;
+  owner: string;
+  repo: string;
+  fullName: string;
+  defaultBranch: string;
+  private: boolean;
+};
+
+async function listInstalledRepositories(installationIds: string[]) {
+  const results = await Promise.all(
+    installationIds.map(async (installationId) => {
+      try {
+        const repositories = await listInstallationRepositories(installationId);
+        return repositories.map((repository) => ({
+          installationId,
+          ...repository,
+        }));
+      } catch {
+        return [] satisfies InstalledRepository[];
+      }
+    }),
+  );
+
+  return results.flat();
+}
+
+function slugFromRepo(repo: string) {
+  return repo
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._~-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "vault";
+}
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ github_error?: string; installation_id?: string }>;
+}) {
+  const user = await requireUser();
+  await claimOrphanSitesForUser(user.id);
+
+  const params = await searchParams;
+  const [sites, notes, runs, installations] = await Promise.all([
+    listSitesForUser(user.id),
+    listPublishedNotesForUser(user.id),
+    listRecentIngestRunsForUser(user.id),
+    listGitHubInstallationsForUser(user.id),
   ]);
+  const installedRepositories = await listInstalledRepositories(
+    installations.map((installation) => installation.github_installation_id),
+  );
   const siteSlugById = new Map(sites.map((site) => [site.id, site.slug]));
+  const configuredRepositories = new Set(sites.map((site) => `${site.owner}/${site.repo}`));
 
   return (
     <main className="stack">
       <section className="row">
         <div>
-          <h1>Admin</h1>
-          <p className="muted">Repository 연결, full sync, publish 상태를 관리합니다.</p>
+          <h1>Dashboard</h1>
+          <p className="muted">Signed in as {user.email}</p>
         </div>
         <form action="/api/admin/logout" method="post">
           <button className="secondary" type="submit">
@@ -27,8 +83,98 @@ export default async function AdminPage() {
         </form>
       </section>
 
+      {params.github_error ? (
+        <section className="card stack">
+          <p className="danger">GitHub install failed: {params.github_error}</p>
+        </section>
+      ) : null}
+      {params.installation_id ? (
+        <section className="card stack">
+          <p className="muted">GitHub App installation connected: {params.installation_id}</p>
+        </section>
+      ) : null}
+
       <section className="card stack">
-        <h2>Site settings</h2>
+        <div className="row">
+          <div>
+            <h2>GitHub connection</h2>
+            <p className="muted">
+              Install the Lumenote GitHub App, then choose a repository to create a site.
+            </p>
+          </div>
+          <Link className="button" href="/api/github/installations/start">
+            Connect GitHub
+          </Link>
+        </div>
+        {installations.length === 0 ? (
+          <p className="muted">No GitHub App installations connected.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Installation</th>
+                <th>Account</th>
+              </tr>
+            </thead>
+            <tbody>
+              {installations.map((installation) => (
+                <tr key={installation.id}>
+                  <td>{installation.github_installation_id}</td>
+                  <td>{installation.account_login ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card stack">
+        <h2>Create site from installed repository</h2>
+        {installedRepositories.length === 0 ? (
+          <p className="muted">Connect GitHub to list repositories.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Repository</th>
+                <th>Branch</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {installedRepositories.map((repository) => {
+                const configured = configuredRepositories.has(repository.fullName);
+                return (
+                  <tr key={`${repository.installationId}:${repository.fullName}`}>
+                    <td>{repository.fullName}</td>
+                    <td>{repository.defaultBranch}</td>
+                    <td>
+                      {configured ? (
+                        <span className="muted">Configured</span>
+                      ) : (
+                        <form action="/api/admin/sites" method="post">
+                          <input name="slug" type="hidden" value={slugFromRepo(repository.repo)} />
+                          <input name="name" type="hidden" value={repository.repo} />
+                          <input name="owner" type="hidden" value={repository.owner} />
+                          <input name="repo" type="hidden" value={repository.repo} />
+                          <input name="branch" type="hidden" value={repository.defaultBranch} />
+                          <input name="github_installation_id" type="hidden" value={repository.installationId} />
+                          <button className="secondary" type="submit">
+                            Create site
+                          </button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card stack">
+        <h2>Manual site settings</h2>
         <form action="/api/admin/sites" method="post">
           <label>
             Existing site id
@@ -89,7 +235,7 @@ export default async function AdminPage() {
                       <input name="site_id" type="hidden" value={site.id} />
                       <input name="ref" type="hidden" value={site.branch} />
                       <button className="secondary" type="submit">
-                        Run
+                        Sync now
                       </button>
                     </form>
                   </td>

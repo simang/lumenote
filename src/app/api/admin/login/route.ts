@@ -1,4 +1,5 @@
-import { createAdminSession, verifyAdminPassword } from "@/lib/auth";
+import { claimOrphanSitesForUser } from "@/lib/repositories";
+import { createUserSession, verifyUserPassword } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -7,10 +8,12 @@ export async function POST(request: Request) {
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
 
-  if (!(await verifyAdminPassword(email, password))) {
+  const user = await verifyUserPassword(email, password);
+  if (!user) {
     return Response.redirect(new URL("/admin/login?error=1", request.url), 303);
   }
 
-  await createAdminSession(email);
+  await claimOrphanSitesForUser(user.id);
+  await createUserSession(user);
   return Response.redirect(new URL("/admin", request.url), 303);
 }

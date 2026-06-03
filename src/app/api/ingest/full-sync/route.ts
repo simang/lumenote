@@ -1,5 +1,6 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { runFullSync } from "@/lib/ingest";
+import { findSiteForUser } from "@/lib/repositories";
 
 export const runtime = "nodejs";
 
@@ -21,11 +22,16 @@ async function readPayload(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await requireAdmin();
+  const user = await requireUser();
   const payload = await readPayload(request);
 
   if (!payload.siteId) {
     return Response.json({ error: "site_id is required" }, { status: 400 });
+  }
+
+  const site = await findSiteForUser(user.id, payload.siteId);
+  if (!site) {
+    return Response.json({ error: "site not found" }, { status: 404 });
   }
 
   const result = await runFullSync({

@@ -1,5 +1,25 @@
+create table if not exists users (
+  id text primary key,
+  email text not null unique,
+  password_hash text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists github_installations (
+  id text primary key,
+  user_id text not null references users(id) on delete cascade,
+  github_installation_id text not null unique,
+  account_login text,
+  account_type text,
+  repository_selection text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists sites (
   id text primary key,
+  user_id text references users(id) on delete cascade,
   slug text not null unique,
   name text not null,
   owner text not null,
@@ -90,7 +110,7 @@ create table if not exists share_links (
 create table if not exists ingest_runs (
   id text primary key,
   site_id text not null references sites(id) on delete cascade,
-  trigger text not null check (trigger in ('github_action', 'admin_full_sync', 'manual')),
+  trigger text not null check (trigger in ('agent_api', 'github_action', 'admin_full_sync', 'manual')),
   before_sha text,
   after_sha text not null,
   idempotency_key text unique,
@@ -111,6 +131,16 @@ $$ language plpgsql;
 drop trigger if exists sites_set_updated_at on sites;
 create trigger sites_set_updated_at
 before update on sites
+for each row execute function set_updated_at();
+
+drop trigger if exists users_set_updated_at on users;
+create trigger users_set_updated_at
+before update on users
+for each row execute function set_updated_at();
+
+drop trigger if exists github_installations_set_updated_at on github_installations;
+create trigger github_installations_set_updated_at
+before update on github_installations
 for each row execute function set_updated_at();
 
 drop trigger if exists source_files_set_updated_at on source_files;

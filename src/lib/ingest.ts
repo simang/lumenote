@@ -52,7 +52,7 @@ export type ChangedPathsInput = {
   changes: ChangedPath[];
 };
 
-type IngestTrigger = "github_action" | "admin_full_sync" | "manual";
+type IngestTrigger = "agent_api" | "github_action" | "admin_full_sync" | "manual";
 
 type ParsedPendingNote = {
   draft: ParsedNoteDraft;
@@ -506,7 +506,7 @@ export async function runChangedPathsIngest(input: ChangedPathsInput) {
   await startIngestRun({
     id: runId,
     siteId: site.id,
-    trigger: "github_action",
+    trigger: "agent_api",
     beforeSha: input.before ?? null,
     afterSha: input.after,
     idempotencyKey: key,

@@ -1,7 +1,27 @@
 export type Visibility = "public" | "unlisted" | "private";
 
+export type User = {
+  id: string;
+  email: string;
+  password_hash: string;
+  created_at: Date;
+  updated_at: Date;
+};
+
+export type GitHubInstallation = {
+  id: string;
+  user_id: string;
+  github_installation_id: string;
+  account_login: string | null;
+  account_type: string | null;
+  repository_selection: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
 export type Site = {
   id: string;
+  user_id: string | null;
   slug: string;
   name: string;
   owner: string;

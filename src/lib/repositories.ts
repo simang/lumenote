@@ -2,10 +2,11 @@ import type { PoolClient } from "pg";
 import { hashShareToken } from "./crypto";
 import { query, queryOne } from "./db";
 import { newId } from "./ids";
-import type { Note, NoteLink, Site, SourceFile, Visibility } from "./types";
+import type { GitHubInstallation, Note, NoteLink, Site, SourceFile, User, Visibility } from "./types";
 
 export type UpsertSiteInput = {
   id?: string;
+  userId: string;
   slug: string;
   name: string;
   owner: string;
@@ -14,24 +15,79 @@ export type UpsertSiteInput = {
   githubInstallationId: string;
 };
 
+export function countUsers() {
+  return queryOne<{ count: number }>("select count(*)::int as count from users");
+}
+
+export function findUserByEmail(email: string) {
+  return queryOne<User>("select * from users where lower(email) = lower($1)", [email]);
+}
+
+export function findUserById(userId: string) {
+  return queryOne<User>("select * from users where id = $1", [userId]);
+}
+
+export async function createUser(email: string, passwordHash: string) {
+  const row = await queryOne<User>(
+    `
+      insert into users(id, email, password_hash)
+      values ($1, lower($2), $3)
+      returning *
+    `,
+    [newId("user"), email, passwordHash],
+  );
+
+  if (!row) {
+    throw new Error("Failed to create user");
+  }
+
+  return row;
+}
+
+export async function upsertUserByEmail(email: string, passwordHash: string) {
+  const row = await queryOne<User>(
+    `
+      insert into users(id, email, password_hash)
+      values ($1, lower($2), $3)
+      on conflict (email) do update set
+        password_hash = excluded.password_hash
+      returning *
+    `,
+    [newId("user"), email, passwordHash],
+  );
+
+  if (!row) {
+    throw new Error("Failed to upsert user");
+  }
+
+  return row;
+}
+
+export async function claimOrphanSitesForUser(userId: string) {
+  await query("update sites set user_id = $1 where user_id is null", [userId]);
+}
+
 export async function upsertSite(input: UpsertSiteInput) {
   const id = input.id || newId("site");
 
   const row = await queryOne<Site>(
     `
-      insert into sites(id, slug, name, owner, repo, branch, github_installation_id)
-      values ($1, $2, $3, $4, $5, $6, $7)
+      insert into sites(id, user_id, slug, name, owner, repo, branch, github_installation_id)
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
       on conflict (id) do update set
+        user_id = excluded.user_id,
         slug = excluded.slug,
         name = excluded.name,
         owner = excluded.owner,
         repo = excluded.repo,
         branch = excluded.branch,
         github_installation_id = excluded.github_installation_id
+      where sites.user_id = excluded.user_id or sites.user_id is null
       returning *
     `,
     [
       id,
+      input.userId,
       input.slug,
       input.name,
       input.owner,
@@ -52,12 +108,26 @@ export function findSiteById(siteId: string) {
   return queryOne<Site>("select * from sites where id = $1", [siteId]);
 }
 
+export function findSiteForUser(userId: string, siteId: string) {
+  return queryOne<Site>(
+    "select * from sites where id = $1 and user_id = $2",
+    [siteId, userId],
+  );
+}
+
 export function findSiteBySlug(slug: string) {
   return queryOne<Site>("select * from sites where slug = $1", [slug]);
 }
 
 export function listSites() {
   return query<Site>("select * from sites order by created_at desc");
+}
+
+export function listSitesForUser(userId: string) {
+  return query<Site>(
+    "select * from sites where user_id = $1 order by created_at desc",
+    [userId],
+  );
 }
 
 export function listRecentIngestRuns(limit = 20) {
@@ -80,6 +150,29 @@ export function listRecentIngestRuns(limit = 20) {
   );
 }
 
+export function listRecentIngestRunsForUser(userId: string, limit = 20) {
+  return query<{
+    id: string;
+    site_id: string;
+    trigger: string;
+    status: string;
+    summary: Record<string, unknown>;
+    started_at: Date;
+    finished_at: Date | null;
+  }>(
+    `
+      select ingest_runs.id, ingest_runs.site_id, ingest_runs.trigger, ingest_runs.status,
+        ingest_runs.summary, ingest_runs.started_at, ingest_runs.finished_at
+      from ingest_runs
+      join sites on sites.id = ingest_runs.site_id
+      where sites.user_id = $1
+      order by ingest_runs.started_at desc
+      limit $2
+    `,
+    [userId, limit],
+  );
+}
+
 export function listPublishedNotes(limit = 100) {
   return query<Note>(
     `
@@ -90,6 +183,23 @@ export function listPublishedNotes(limit = 100) {
       limit $1
     `,
     [limit],
+  );
+}
+
+export function listPublishedNotesForUser(userId: string, limit = 100) {
+  return query<Note>(
+    `
+      select notes.*
+      from notes
+      join sites on sites.id = notes.site_id
+      where sites.user_id = $1
+        and notes.deleted_at is null
+        and notes.publish is true
+        and notes.parse_error is null
+      order by notes.updated_at desc
+      limit $2
+    `,
+    [userId, limit],
   );
 }
 
@@ -207,7 +317,7 @@ export async function createIngestRun(
   input: {
     id: string;
     siteId: string;
-    trigger: "github_action" | "admin_full_sync" | "manual";
+    trigger: "agent_api" | "github_action" | "admin_full_sync" | "manual";
     beforeSha?: string | null;
     afterSha: string;
     idempotencyKey?: string | null;
@@ -488,4 +598,95 @@ export async function createShareLink(noteId: string, tokenHash: string) {
   }
 
   return row;
+}
+
+export async function createShareLinkForUser(userId: string, noteId: string, tokenHash: string) {
+  const note = await queryOne<Pick<Note, "site_id" | "visibility" | "publish" | "deleted_at">>(
+    `
+      select notes.site_id, notes.visibility, notes.publish, notes.deleted_at
+      from notes
+      join sites on sites.id = notes.site_id
+      where notes.id = $1 and sites.user_id = $2
+    `,
+    [noteId, userId],
+  );
+
+  if (!note || note.deleted_at || !note.publish || note.visibility !== "unlisted") {
+    throw new Error("Share links can only be created for owned published unlisted notes");
+  }
+
+  const row = await queryOne<{ id: string; site_id: string }>(
+    `
+      insert into share_links(id, site_id, note_id, token_hash)
+      values ($1, $2, $3, $4)
+      returning id, site_id
+    `,
+    [newId("share"), note.site_id, noteId, tokenHash],
+  );
+
+  if (!row) {
+    throw new Error("Failed to create share link");
+  }
+
+  return row;
+}
+
+export async function upsertGitHubInstallation(input: {
+  userId: string;
+  githubInstallationId: string;
+  accountLogin?: string | null;
+  accountType?: string | null;
+  repositorySelection?: string | null;
+}) {
+  const row = await queryOne<GitHubInstallation>(
+    `
+      insert into github_installations(
+        id, user_id, github_installation_id, account_login, account_type, repository_selection
+      )
+      values ($1, $2, $3, $4, $5, $6)
+      on conflict (github_installation_id) do update set
+        user_id = excluded.user_id,
+        account_login = excluded.account_login,
+        account_type = excluded.account_type,
+        repository_selection = excluded.repository_selection
+      returning *
+    `,
+    [
+      newId("install"),
+      input.userId,
+      input.githubInstallationId,
+      input.accountLogin ?? null,
+      input.accountType ?? null,
+      input.repositorySelection ?? null,
+    ],
+  );
+
+  if (!row) {
+    throw new Error("Failed to upsert GitHub installation");
+  }
+
+  return row;
+}
+
+export function listGitHubInstallationsForUser(userId: string) {
+  return query<GitHubInstallation>(
+    `
+      select *
+      from github_installations
+      where user_id = $1
+      order by updated_at desc
+    `,
+    [userId],
+  );
+}
+
+export function findGitHubInstallationForUser(userId: string, githubInstallationId: string) {
+  return queryOne<GitHubInstallation>(
+    `
+      select *
+      from github_installations
+      where user_id = $1 and github_installation_id = $2
+    `,
+    [userId, githubInstallationId],
+  );
 }

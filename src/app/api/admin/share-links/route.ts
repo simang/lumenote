@@ -1,12 +1,12 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { appUrlFromRequest } from "@/lib/config";
 import { hashShareToken, randomToken } from "@/lib/crypto";
-import { createShareLink } from "@/lib/repositories";
+import { createShareLinkForUser } from "@/lib/repositories";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  await requireAdmin();
+  const user = await requireUser();
   const form = await request.formData();
   const noteId = String(form.get("note_id") ?? "");
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   }
 
   const token = randomToken();
-  const share = await createShareLink(noteId, hashShareToken(token));
+  const share = await createShareLinkForUser(user.id, noteId, hashShareToken(token));
   const url = `${appUrlFromRequest(request)}/s/${token}`;
 
   return Response.json({
