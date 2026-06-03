@@ -1,11 +1,11 @@
 ---
 name: lumenote-publisher
-description: Publish or refresh Lumenote Markdown vault changes from an AI agent without requiring a GitHub Actions workflow. Use when Codex is editing a Tolaria/Markdown vault, applying Lumenote frontmatter, committing/pushing vault changes, manually notifying Lumenote through POST /api/ingest/changed-paths, or troubleshooting direct Lumenote ingest API calls with LUMENOTE_API_URL, LUMENOTE_SITE_ID, and LUMENOTE_INGEST_TOKEN.
+description: Publish or refresh Lumenote Markdown vault changes from an AI agent by calling the Lumenote ingest API directly. Use when Codex is editing a Tolaria/Markdown vault, applying Lumenote frontmatter, committing/pushing vault changes, manually notifying Lumenote through POST /api/ingest/changed-paths, or troubleshooting direct Lumenote ingest API calls with LUMENOTE_API_URL, LUMENOTE_SITE_ID, and LUMENOTE_INGEST_TOKEN.
 ---
 
 # Lumenote Publisher
 
-Use this skill to update Lumenote after an agent changes a vault repository and the vault does not have the Lumenote GitHub Action installed.
+Use this skill to update Lumenote after an agent changes and pushes a vault repository.
 
 ## Core workflow
 

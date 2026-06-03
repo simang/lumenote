@@ -66,7 +66,7 @@ Lumenote의 차별점은 Tolaria-first 데이터 모델, GitHub read-only vault 
 
 1. 사용자가 Tolaria 노트 frontmatter에 `lumenote.publish: true`를 추가한다.
 2. GitHub에 commit/push한다.
-3. vault repository의 GitHub Action이 변경된 path 목록을 Lumenote API로 전달한다.
+3. 사용자가 Lumenote admin에서 full sync를 실행하거나, AI agent/API client가 변경된 path 목록을 Lumenote API로 전달한다.
 4. Lumenote가 GitHub App 권한으로 변경된 파일만 읽는다.
 5. 변경된 노트를 다시 인덱싱한다.
 6. public URL 또는 unlisted URL을 생성한다.
@@ -188,7 +188,7 @@ slug 충돌 처리:
 
 ```text
 GitHub Repository
-  -> GitHub Action changed-path trigger
+  -> Admin full sync or Agent/API changed-path trigger
   -> Lumenote API Server
   -> GitHub App read-only file fetch
   -> Vault Ingestion Worker
@@ -202,7 +202,7 @@ GitHub Repository
 | 컴포넌트 | 역할 |
 |---|---|
 | API Server | 사용자, repository 연결, site 설정, publish 상태 관리 |
-| GitHub Action Notifier | vault push 시 변경 path 목록을 Lumenote API로 전달 |
+| Agent/API Ingest Trigger | commit 변경 path 목록을 Lumenote API로 전달 |
 | GitHub Integration | GitHub App 설치, repo read, installation token 발급 |
 | Ingestion Worker | 변경 파일 fetch, 인덱싱, materialized store 갱신 |
 | Markdown Parser | frontmatter, Markdown AST, wikilink, asset 분석 |
@@ -316,13 +316,13 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 - password는 bcrypt/argon2로 hash한다.
 - publish되지 않은 노트의 제목, 경로, 링크 정보가 public page에 새지 않도록 필터링한다.
 - asset도 노트와 동일한 visibility 정책을 따른다.
-- GitHub Action ingest payload와 향후 webhook payload 검증을 필수로 한다.
+- Agent/API ingest payload와 향후 webhook payload 검증을 필수로 한다.
 - Markdown HTML injection을 방지하기 위해 sanitizer를 적용한다.
 
 ## MVP 범위
 
 1. GitHub App 기반 repository 연결
-2. GitHub Action 기반 changed-path trigger
+2. Admin full sync와 Agent/API 기반 changed-path trigger
 3. frontmatter `lumenote.publish: true` 노트만 인덱싱
 4. `public` visibility 페이지 렌더링
 5. `unlisted` share link 생성
@@ -362,6 +362,6 @@ MVP는 옵션 A를 사용한다. 옵션 B와 C는 제품화 이후 deployment ad
 3. wikilink resolver
 4. static renderer prototype
 5. GitHub App integration
-6. GitHub Action changed-path notifier
+6. Agent/API changed-path trigger
 7. public/unlisted route serving
 8. small dashboard

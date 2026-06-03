@@ -1,4 +1,4 @@
 interface:
   display_name: "Lumenote Publisher"
-  short_description: "Publish Lumenote vault changes without GitHub Actions."
+  short_description: "Publish Lumenote vault changes through the ingest API."
   default_prompt: "Publish or refresh changed Markdown notes through the Lumenote API."

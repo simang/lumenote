@@ -11,7 +11,7 @@ Lumenote는 Tolaria Markdown vault에서 선택된 노트만 웹 페이지로 pu
 - `docs/SPEC.md`
 - `docs/DESIGN.md`
 
-AI agent가 vault frontmatter를 수정하거나 GitHub Action 없이 직접 ingest API를 호출할 때 사용할 수 있는 배포 가능한 skill은 다음 경로에 있습니다.
+AI agent가 vault frontmatter를 수정하거나 직접 ingest API를 호출할 때 사용할 수 있는 배포 가능한 skill은 다음 경로에 있습니다.
 
 - `skills/lumenote-publisher`
 
@@ -20,7 +20,7 @@ AI agent가 vault frontmatter를 수정하거나 GitHub Action 없이 직접 ing
 - Next.js App Router 기반 앱
 - Supabase/Postgres 호환 DB schema와 migration
 - GitHub App installation token 기반 repository file fetch
-- GitHub Action changed-path ingestion API
+- Agent/API changed-path ingestion API
 - Admin password session
 - Markdown/frontmatter/wikilink parser
 - Sanitized HTML materialized note store
@@ -95,7 +95,7 @@ http://localhost:3000/admin
 3. `npm run db:migrate`로 DB schema를 적용합니다.
 4. `/admin`에서 site 설정을 저장합니다.
 5. Admin UI에서 full sync를 실행하거나 CLI로 실행합니다.
-6. Vault repository에 GitHub Action template을 추가해 변경 path ingestion을 연결합니다.
+6. AI agent skill 또는 외부 API client로 변경 path ingestion을 trigger합니다.
 
 ## Full sync
 
@@ -108,26 +108,27 @@ npm run ingest:full -- --site site_123 --ref main
 
 Full sync는 repository tree를 읽고, Markdown과 supported asset만 ingestion 대상으로 처리합니다.
 
-## GitHub Action template
+## Agent/API ingest trigger
 
-Vault repository에 다음 파일을 복사합니다.
+Vault repository의 commit/push 이후, AI agent나 외부 도구가 변경 commit 기준으로 ingest를 trigger할 수 있습니다.
 
-```text
-templates/github/lumenote.yml -> .github/workflows/lumenote.yml
-templates/github/lumenote-changes.mjs -> .github/scripts/lumenote-changes.mjs
+배포 가능한 Codex skill:
+
+```bash
+skills/lumenote-publisher
 ```
 
-Vault repository secret을 설정합니다.
+필요한 환경 변수:
 
-```text
+```bash
 LUMENOTE_API_URL
 LUMENOTE_INGEST_TOKEN
 LUMENOTE_SITE_ID
 ```
 
-Action은 push diff에서 Markdown과 supported asset path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 Action payload에 포함하지 않습니다.
+Skill은 `git diff --name-status {before} {after}`로 Markdown과 supported asset 변경 path만 추출한 뒤 `POST /api/ingest/changed-paths`를 호출합니다. 파일 내용은 API payload에 포함하지 않습니다.
 
-GitHub Action이 없는 vault repository에서는 `skills/lumenote-publisher` skill을 사용해 AI agent가 같은 API를 직접 호출할 수 있습니다.
+웹에서는 `/admin`의 full sync 버튼으로 사용자가 직접 전체 갱신을 trigger할 수 있습니다.
 
 ## Frontmatter
 
@@ -210,7 +211,7 @@ npm audit
 ## 보안 원칙
 
 - GitHub repository는 read-only 권한으로만 접근합니다.
-- GitHub Action payload에는 파일 내용을 포함하지 않습니다.
+- Ingest API payload에는 파일 내용을 포함하지 않습니다.
 - Ingest API는 bearer token을 검증합니다.
 - Markdown HTML은 sanitize 후 저장합니다.
 - Unlisted share token은 raw value를 DB에 저장하지 않고 hash만 저장합니다.

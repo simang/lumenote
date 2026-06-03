@@ -12,8 +12,8 @@
 |---|---|
 | 앱 호스팅 | Vercel에 Lumenote Next.js 앱을 1개 배포 |
 | vault 접근 | GitHub App installation token으로 repository contents read |
-| 업데이트 트리거 | vault repository의 GitHub Action이 changed paths를 Lumenote API에 전달 |
-| 파일 내용 전달 | GitHub Action은 파일 내용을 보내지 않고 path/status/commit만 보낸다 |
+| 업데이트 트리거 | Admin full sync 또는 AI agent/API client가 changed paths를 Lumenote API에 전달 |
+| 파일 내용 전달 | ingest trigger는 파일 내용을 보내지 않고 path/status/commit만 보낸다 |
 | 노트 serving | Lumenote 앱이 materialized note store에서 직접 제공 |
 | Vercel OAuth | MVP 제외 |
 | 사용자 모델 | 단일 admin 사용자 |
@@ -26,8 +26,8 @@
 
 ```text
 Tolaria vault repository
-  -> GitHub Action on push
-  -> POST /api/ingest/changed-paths
+  -> User/admin sync trigger or AI agent/API trigger
+  -> POST /api/ingest/full-sync or POST /api/ingest/changed-paths
   -> Lumenote ingestion service
   -> GitHub App reads changed files at commit SHA
   -> Markdown/frontmatter/wikilink parser
@@ -132,7 +132,7 @@ MVP admin 인증:
 - Repository contents: read-only
 - Webhooks: optional for later managed mode
 
-MVP에서는 webhook보다 vault repository의 GitHub Action을 우선 사용한다. 그래도 GitHub App은 파일 내용을 안전하게 읽기 위해 필요하다.
+MVP에서는 GitHub webhook이나 repo-local 자동화 파일을 기본 경로로 사용하지 않는다. GitHub App은 파일 내용을 안전하게 읽기 위해 필요하고, 업데이트는 admin full sync 또는 AI agent/API trigger로 시작한다.
 
 저장해야 하는 값:
 
@@ -144,70 +144,25 @@ MVP에서는 webhook보다 vault repository의 GitHub Action을 우선 사용한
 
 private key는 DB에 저장하지 않고 Vercel secret/env로 둔다.
 
-### GitHub Action
+### Agent/API ingest trigger
 
-vault repository에는 Lumenote update workflow를 추가한다. Action은 push가 발생하면 변경된 Markdown과 asset path를 계산해서 Lumenote API를 호출한다.
+vault repository에 별도 자동화 파일을 추가하지 않는다. 대신 AI agent나 외부 API client가 commit diff를 계산해 Lumenote API를 호출한다.
 
-Action secret:
+Trigger client의 역할:
 
-- `LUMENOTE_API_URL`
-- `LUMENOTE_INGEST_TOKEN`
-- `LUMENOTE_SITE_ID`
-
-Workflow skeleton:
-
-```yaml
-name: Lumenote
-
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - "**/*.md"
-      - "**/*.png"
-      - "**/*.jpg"
-      - "**/*.jpeg"
-      - "**/*.gif"
-      - "**/*.webp"
-      - "**/*.svg"
-
-permissions:
-  contents: read
-
-jobs:
-  notify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Notify Lumenote
-        env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-          LUMENOTE_API_URL: ${{ secrets.LUMENOTE_API_URL }}
-          LUMENOTE_INGEST_TOKEN: ${{ secrets.LUMENOTE_INGEST_TOKEN }}
-          LUMENOTE_SITE_ID: ${{ secrets.LUMENOTE_SITE_ID }}
-        run: |
-          node .github/scripts/lumenote-changes.mjs
-```
-
-`lumenote-changes.mjs`의 역할:
-
-1. `git diff --name-status $BEFORE $AFTER` 실행
+1. `git diff --name-status {before} {after}` 실행
 2. `*.md`와 supported asset만 필터링
 3. rename을 `{ status: "renamed", path, previous_path }`로 정규화
-4. payload를 `POST /api/ingest/changed-paths`로 전송
+4. repository owner, repo, branch, before SHA, after SHA를 payload에 포함
+5. payload를 `POST /api/ingest/changed-paths`로 전송
 
-Action 스크립트를 별도 파일로 두면 shell JSON escaping 문제를 줄일 수 있다.
+공식 agent 경로는 `skills/lumenote-publisher` skill이다. 사용자가 웹에서 직접 갱신하려면 admin UI의 full sync action을 사용한다.
 
 ## Ingestion API
 
 ### POST `/api/ingest/changed-paths`
 
-GitHub Action이 호출한다.
+AI agent 또는 외부 API client가 호출한다.
 
 Headers:
 
@@ -639,9 +594,9 @@ Ingestion error는 가능한 한 site 전체 publish를 막지 않는다.
 
 ## Security
 
-- Lumenote API는 file content를 Action payload에서 받지 않는다.
+- Lumenote API는 file content를 ingest payload에서 받지 않는다.
 - GitHub file content는 GitHub App installation token으로만 읽는다.
-- ingest token은 Vercel env와 GitHub Actions secret에만 둔다.
+- ingest token은 Lumenote env와 agent/API client secret store에만 둔다.
 - ingest payload의 `site_id`, repository, branch를 DB 설정과 비교한다.
 - Markdown HTML은 sanitize한다.
 - raw HTML 허용 여부는 기본 false로 둔다.
@@ -698,7 +653,7 @@ fixtures/vault/frontmatter
 6. public note renderer
 7. GitHub App installation token client
 8. changed-path ingestion API
-9. GitHub Action script
+9. Lumenote publisher agent skill
 10. full sync admin action
 11. asset storage/proxy
 12. admin UI
@@ -707,12 +662,10 @@ fixtures/vault/frontmatter
 ## 남은 결정
 
 - Tolaria note type/resource/project schema를 public page template에 반영할지
-- GitHub Action workflow를 사용자가 복사하게 할지, Lumenote가 파일을 생성해 제공할지
+- changed-path trigger token을 site별로 발급/회전할지
 
 ## 참고 문서
 
 - GitHub REST API rate limits: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 - GitHub Git Trees API: https://docs.github.com/en/rest/git/trees
 - GitHub repository contents API: https://docs.github.com/en/rest/repos/contents
-- GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
-- GitHub Actions events: https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows
