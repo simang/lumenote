@@ -449,6 +449,36 @@ async function processChanges(options: {
   }
 }
 
+async function startIngestRun(input: {
+  id: string;
+  siteId: string;
+  trigger: IngestTrigger;
+  beforeSha?: string | null;
+  afterSha: string;
+  idempotencyKey?: string | null;
+}) {
+  await withTransaction(async (client) => {
+    await createIngestRun(client, input);
+  });
+}
+
+async function markIngestRunFailed(
+  runId: string,
+  summary: IngestSummary,
+  error: unknown,
+) {
+  const message = error instanceof Error ? error.message : String(error);
+  summary.errors.push({ path: "*", message });
+
+  try {
+    await withTransaction(async (client) => {
+      await finishIngestRun(client, runId, "failed", summary);
+    });
+  } catch (finishError) {
+    console.error("Failed to mark ingest run as failed", finishError);
+  }
+}
+
 export async function runChangedPathsIngest(input: ChangedPathsInput) {
   const site = await findSiteById(input.site_id);
   if (!site) {
@@ -473,17 +503,17 @@ export async function runChangedPathsIngest(input: ChangedPathsInput) {
   const runId = newId("run");
   const summary = emptySummary(changes.length);
 
-  await withTransaction(async (client) => {
-    await createIngestRun(client, {
-      id: runId,
-      siteId: site.id,
-      trigger: "github_action",
-      beforeSha: input.before ?? null,
-      afterSha: input.after,
-      idempotencyKey: key,
-    });
+  await startIngestRun({
+    id: runId,
+    siteId: site.id,
+    trigger: "github_action",
+    beforeSha: input.before ?? null,
+    afterSha: input.after,
+    idempotencyKey: key,
+  });
 
-    try {
+  try {
+    await withTransaction(async (client) => {
       await processChanges({
         site,
         ref: input.after,
@@ -492,13 +522,11 @@ export async function runChangedPathsIngest(input: ChangedPathsInput) {
         summary,
       });
       await finishIngestRun(client, runId, "completed", summary);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      summary.errors.push({ path: "*", message });
-      await finishIngestRun(client, runId, "failed", summary);
-      throw error;
-    }
-  });
+    });
+  } catch (error) {
+    await markIngestRunFailed(runId, summary, error);
+    throw error;
+  }
 
   return {
     ingest_run_id: runId,
@@ -543,17 +571,17 @@ export async function runFullSync(input: {
   const runId = newId("run");
   const summary = emptySummary(changes.length);
 
-  await withTransaction(async (client) => {
-    await createIngestRun(client, {
-      id: runId,
-      siteId: site.id,
-      trigger: input.trigger,
-      beforeSha: null,
-      afterSha: ref,
-      idempotencyKey: null,
-    });
+  await startIngestRun({
+    id: runId,
+    siteId: site.id,
+    trigger: input.trigger,
+    beforeSha: null,
+    afterSha: ref,
+    idempotencyKey: null,
+  });
 
-    try {
+  try {
+    await withTransaction(async (client) => {
       for (const file of candidateFiles) {
         const kind = fileKind(file.path);
         await upsertSourceFile(client, {
@@ -575,13 +603,11 @@ export async function runFullSync(input: {
       });
 
       await finishIngestRun(client, runId, "completed", summary);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      summary.errors.push({ path: "*", message });
-      await finishIngestRun(client, runId, "failed", summary);
-      throw error;
-    }
-  });
+    });
+  } catch (error) {
+    await markIngestRunFailed(runId, summary, error);
+    throw error;
+  }
 
   return {
     ingest_run_id: runId,

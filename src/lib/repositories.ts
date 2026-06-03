@@ -249,7 +249,11 @@ export async function finishIngestRun(
   await client.query(
     `
       update ingest_runs
-      set status = $2, summary = $3, finished_at = now()
+      set
+        status = $2,
+        summary = $3,
+        finished_at = now(),
+        idempotency_key = case when $2::text = 'failed' then null else idempotency_key end
       where id = $1
     `,
     [runId, status, JSON.stringify(summary)],
@@ -360,8 +364,10 @@ export async function upsertNote(
         id, site_id, path, source_sha, slug, title, description, publish, visibility,
         frontmatter, lumenote, body_hash, html, parse_error, published_at, deleted_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-        case when $8 is true and $14 is null then now() else null end,
+      values (
+        $1, $2, $3, $4, $5, $6, $7, $8::boolean, $9, $10::jsonb, $11::jsonb,
+        $12, $13, $14::text,
+        case when $8::boolean is true and $14::text is null then now() else null end,
         null
       )
       on conflict (site_id, path) do update set

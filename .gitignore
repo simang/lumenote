@@ -10,3 +10,4 @@ pnpm-debug.log*
 yarn-debug.log*
 .vercel
 supabase/.temp
+*.pem
