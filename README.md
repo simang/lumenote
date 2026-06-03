@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" alt="Lumenote logo" width="160" />
+</p>
+
 # Lumenote
 
 Lumenote는 Tolaria Markdown vault에서 선택된 노트만 웹 페이지로 publish하는 서비스입니다. GitHub repository를 read-only로 읽고, frontmatter 설정에 따라 공개 페이지와 unlisted share link를 제공합니다.
