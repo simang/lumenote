@@ -78,4 +78,56 @@ See [[Target|public target]] and [[Secret]].
     expect(rendered.html).not.toContain("secret");
     expect(rendered.outgoingLinks).toHaveLength(2);
   });
+
+  it("removes a leading H1 when it duplicates the resolved title", async () => {
+    const draft = parseNoteDraft({
+      siteId: "site_1",
+      path: "Daily.md",
+      sourceSha: "sha_1",
+      markdown: `# Daily
+
+Body content.
+`,
+    });
+
+    const rendered = await renderNoteDraft(draft, {
+      resolveNote() {
+        return { status: "unresolved" };
+      },
+      resolveAsset() {
+        return null;
+      },
+    });
+
+    expect(draft.title).toBe("Daily");
+    expect(rendered.html).not.toContain("<h1");
+    expect(rendered.html).toContain("<p>Body content.</p>");
+  });
+
+  it("preserves GFM task list checkbox markup", async () => {
+    const draft = parseNoteDraft({
+      siteId: "site_1",
+      path: "Tasks.md",
+      sourceSha: "sha_1",
+      markdown: `# Tasks
+
+- [ ] Open task
+- [x] Done task
+`,
+    });
+
+    const rendered = await renderNoteDraft(draft, {
+      resolveNote() {
+        return { status: "unresolved" };
+      },
+      resolveAsset() {
+        return null;
+      },
+    });
+
+    expect(rendered.html).toContain("contains-task-list");
+    expect(rendered.html).toContain("task-list-item");
+    expect(rendered.html).toContain('type="checkbox"');
+    expect(rendered.html).toContain("checked");
+  });
 });

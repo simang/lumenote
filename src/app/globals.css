@@ -246,6 +246,23 @@ details[open] summary {
   line-height: 1.75;
 }
 
+.note-shell ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.note-shell li.task-list-item {
+  list-style: none;
+}
+
+.note-shell li.task-list-item input[type="checkbox"] {
+  display: inline-block;
+  margin: 0 0.5em 0.15em 0;
+  max-width: none;
+  vertical-align: middle;
+  width: auto;
+}
+
 .note-shell img {
   border-radius: 12px;
   height: auto;

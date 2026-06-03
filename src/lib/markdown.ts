@@ -233,12 +233,37 @@ function markdownSanitizeSchema() {
       ["decoding"],
       ["className"],
     ],
+    input: [
+      ...((schema.attributes?.input as unknown[]) ?? []),
+      ["type"],
+      ["checked"],
+      ["disabled"],
+      ["className"],
+    ],
     code: [...((schema.attributes?.code as unknown[]) ?? []), ["className"]],
     pre: [...((schema.attributes?.pre as unknown[]) ?? []), ["className"]],
     span: [...((schema.attributes?.span as unknown[]) ?? []), ["className"]],
   };
+  schema.tagNames = [...new Set([...(schema.tagNames ?? []), "input"])];
 
   return schema;
+}
+
+function stripLeadingTitleH1(body: string, title: string) {
+  const lines = body.split("\n");
+  const firstLine = lines[0] ?? "";
+  const match = firstLine.match(/^#\s+(.+)$/);
+
+  if (!match || stripInlineMarkdown(match[1]) !== title.trim()) {
+    return body;
+  }
+
+  const remaining = lines.slice(1);
+  if (remaining[0] === "") {
+    remaining.shift();
+  }
+
+  return remaining.join("\n").trimStart();
 }
 
 function isFenceLine(line: string) {
@@ -391,7 +416,8 @@ export async function renderNoteDraft(
     ...context,
     notePath: draft.path,
   };
-  const imageRewritten = rewriteMarkdownImages(draft.body, fullContext);
+  const body = stripLeadingTitleH1(draft.body, draft.title);
+  const imageRewritten = rewriteMarkdownImages(body, fullContext);
   const wikilinkRewritten = rewriteWikilinks(imageRewritten, fullContext);
   const html = await renderMarkdownToHtml(wikilinkRewritten.markdown);
 
