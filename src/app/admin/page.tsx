@@ -171,6 +171,7 @@ export default async function AdminPage({
                         <span className="muted">Configured</span>
                       ) : (
                         <form action="/api/admin/sites" method="post">
+                          <input name="auto_slug" type="hidden" value="1" />
                           <input name="slug" type="hidden" value={slugFromRepo(repository.repo)} />
                           <input name="name" type="hidden" value={repository.repo} />
                           <input name="owner" type="hidden" value={repository.owner} />

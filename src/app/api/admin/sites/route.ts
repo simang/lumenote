@@ -1,12 +1,39 @@
 import { requireUser } from "@/lib/auth";
 import { getInstallationAccount } from "@/lib/github";
 import {
+  findSiteBySlug,
   findGitHubInstallationForUser,
   upsertGitHubInstallation,
   upsertSite,
 } from "@/lib/repositories";
 
 export const runtime = "nodejs";
+
+async function availableAutoSlug(slug: string, owner: string, repo: string) {
+  const fallbackBase = `${owner}-${repo}`
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._~-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || slug;
+
+  const bases = [slug, fallbackBase];
+  for (const base of bases) {
+    if (!(await findSiteBySlug(base))) {
+      return base;
+    }
+  }
+
+  for (let suffix = 2; suffix < 100; suffix += 1) {
+    const candidate = `${fallbackBase}-${suffix}`;
+    if (!(await findSiteBySlug(candidate))) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Could not find an available site slug");
+}
 
 export async function POST(request: Request) {
   const user = await requireUser();
@@ -18,6 +45,7 @@ export async function POST(request: Request) {
   const repo = String(form.get("repo") ?? "").trim();
   const branch = String(form.get("branch") ?? "").trim() || "main";
   const githubInstallationId = String(form.get("github_installation_id") ?? "").trim();
+  const autoSlug = String(form.get("auto_slug") ?? "") === "1";
 
   if (!slug || !name || !owner || !repo || !githubInstallationId) {
     return Response.json({ error: "slug, name, owner, repo and github_installation_id are required" }, { status: 400 });
@@ -39,16 +67,26 @@ export async function POST(request: Request) {
     }
   }
 
-  await upsertSite({
-    id,
-    userId: user.id,
-    slug,
-    name,
-    owner,
-    repo,
-    branch,
-    githubInstallationId,
-  });
+  const siteSlug = !id && autoSlug ? await availableAutoSlug(slug, owner, repo) : slug;
+
+  try {
+    await upsertSite({
+      id,
+      userId: user.id,
+      slug: siteSlug,
+      name,
+      owner,
+      repo,
+      branch,
+      githubInstallationId,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+      return Response.json({ error: `site slug is already taken: ${siteSlug}` }, { status: 409 });
+    }
+
+    throw error;
+  }
 
   return Response.redirect(new URL("/admin", request.url), 303);
 }
