@@ -51,6 +51,10 @@ export type IngestJob = {
   updated_at: Date;
 };
 
+export type OwnerNoteSummary = Omit<Note, "html"> & {
+  snippet: string | null;
+};
+
 export function countUsers() {
   return queryOne<{ count: number }>("select count(*)::int as count from users");
 }
@@ -475,6 +479,101 @@ export function listPublishedNotesForSiteForUser(userId: string, siteId: string,
       limit $3
     `,
     [userId, siteId, limit],
+  );
+}
+
+export function listOwnerNotesForSiteForUser(userId: string, siteId: string, limit = 5000) {
+  return query<OwnerNoteSummary>(
+    `
+      select
+        notes.id,
+        notes.site_id,
+        notes.path,
+        notes.source_sha,
+        notes.slug,
+        notes.title,
+        notes.description,
+        notes.publish,
+        notes.visibility,
+        notes.frontmatter,
+        notes.lumenote,
+        notes.body_hash,
+        notes.parse_error,
+        notes.published_at,
+        notes.deleted_at,
+        notes.created_at,
+        notes.updated_at,
+        nullif(
+          trim(
+            regexp_replace(
+              regexp_replace(notes.html, '<[^>]*>', ' ', 'g'),
+              '\\s+',
+              ' ',
+              'g'
+            )
+          ),
+          ''
+        ) as snippet
+      from notes
+      join sites on sites.id = notes.site_id
+      where sites.user_id = $1
+        and sites.id = $2
+        and notes.deleted_at is null
+      order by notes.updated_at desc
+      limit $3
+    `,
+    [userId, siteId, limit],
+  );
+}
+
+export function findOwnerNoteForSiteForUser(userId: string, siteId: string, noteId: string) {
+  return queryOne<Note>(
+    `
+      select notes.*
+      from notes
+      join sites on sites.id = notes.site_id
+      where sites.user_id = $1
+        and sites.id = $2
+        and notes.id = $3
+        and notes.deleted_at is null
+      limit 1
+    `,
+    [userId, siteId, noteId],
+  );
+}
+
+export function listOwnerBacklinksForNoteForUser(userId: string, siteId: string, noteId: string) {
+  return query<Pick<Note, "id" | "title" | "slug" | "path">>(
+    `
+      select distinct source_notes.id, source_notes.title, source_notes.slug, source_notes.path
+      from note_links
+      join notes source_notes on source_notes.id = note_links.source_note_id
+      join sites on sites.id = source_notes.site_id
+      where sites.user_id = $1
+        and sites.id = $2
+        and note_links.target_note_id = $3
+        and source_notes.deleted_at is null
+      order by source_notes.title asc
+    `,
+    [userId, siteId, noteId],
+  );
+}
+
+export function listOwnerOutgoingLinksForNoteForUser(userId: string, siteId: string, noteId: string) {
+  return query<Pick<Note, "id" | "title" | "slug" | "path">>(
+    `
+      select distinct target_notes.id, target_notes.title, target_notes.slug, target_notes.path
+      from note_links
+      join notes source_notes on source_notes.id = note_links.source_note_id
+      join sites on sites.id = source_notes.site_id
+      join notes target_notes on target_notes.id = note_links.target_note_id
+      where sites.user_id = $1
+        and sites.id = $2
+        and source_notes.id = $3
+        and target_notes.deleted_at is null
+      order by target_notes.title asc
+    `,
+    [userId, siteId, noteId],
   );
 }
 

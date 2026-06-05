@@ -72,6 +72,10 @@ main {
   min-width: 0;
 }
 
+.compact-row {
+  gap: 8px;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -313,4 +317,233 @@ details[open] summary {
 
 .danger {
   color: var(--danger);
+}
+
+.vault-main {
+  padding: 28px 0;
+  width: min(1440px, calc(100vw - 32px));
+}
+
+.vault-reader {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgb(31 35 40 / 6%);
+  display: grid;
+  grid-template-columns: 240px minmax(300px, 380px) minmax(0, 1fr);
+  min-height: calc(100vh - 190px);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.vault-sidebar {
+  background: #f1efe8;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.vault-nav-section {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.vault-nav-section h2 {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  padding: 0 8px;
+  text-transform: uppercase;
+}
+
+.vault-nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+.vault-nav-item {
+  align-items: center;
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.vault-nav-item:hover,
+.vault-nav-item.active {
+  background: var(--accent-weak);
+  text-decoration: none;
+}
+
+.vault-nav-label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-dot {
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.vault-count {
+  background: rgb(104 112 118 / 14%);
+  border-radius: 999px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 22px;
+  padding: 2px 7px;
+  text-align: center;
+}
+
+.vault-list {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.vault-list-header {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.vault-list-header h2,
+.vault-list-header p {
+  margin: 0;
+}
+
+.vault-list-header form {
+  gap: 0;
+}
+
+.vault-note-list {
+  min-height: 0;
+  overflow: auto;
+}
+
+.vault-empty {
+  padding: 16px;
+}
+
+.vault-note-row {
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.vault-note-row:hover {
+  background: #f6f4ef;
+  text-decoration: none;
+}
+
+.vault-note-row.active {
+  background: var(--accent-weak);
+  border-left: 3px solid var(--accent);
+  padding-left: 13px;
+}
+
+.vault-note-title {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vault-note-meta,
+.vault-note-path {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vault-note-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-note-snippet {
+  color: var(--muted);
+  display: -webkit-box;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.vault-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vault-chip {
+  background: rgb(104 112 118 / 12%);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-content {
+  background: var(--bg);
+  min-width: 0;
+  overflow: auto;
+}
+
+.vault-content article {
+  margin: 20px;
+}
+
+@media (max-width: 1100px) {
+  .vault-reader {
+    grid-template-columns: 220px minmax(260px, 340px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 880px) {
+  .vault-reader {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-sidebar,
+  .vault-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    max-height: 420px;
+  }
+
+  .vault-content article {
+    margin: 12px;
+  }
 }

@@ -176,9 +176,14 @@ export default async function SiteDetailPage({
             <h2>Site settings</h2>
             <p className="muted">Update this site’s slug and repository mapping.</p>
           </div>
-          <Link className="button secondary" href={`/p/${site.slug}`}>
-            Public root
-          </Link>
+          <div className="row compact-row">
+            <Link className="button secondary" href={`/dashboard/sites/${site.id}/notes`}>
+              Read vault
+            </Link>
+            <Link className="button secondary" href={`/p/${site.slug}`}>
+              Public root
+            </Link>
+          </div>
         </div>
         <form action="/api/sites" method="post">
           <input name="id" type="hidden" value={site.id} />
