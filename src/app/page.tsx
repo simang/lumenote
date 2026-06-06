@@ -10,8 +10,8 @@ export default function HomePage() {
           GitHub에 있는 Markdown vault를 읽어 frontmatter로 선택된 노트만 공개합니다.
         </p>
         <div className="row">
-          <Link className="button" href="/dashboard">
-            Dashboard
+          <Link className="button" href="/vault">
+            Open vault
           </Link>
           <Link className="button secondary" href="/login">
             Login

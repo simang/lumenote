@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const state = await createGitHubInstallState();
     return Response.redirect(githubAppInstallUrl(state), 303);
   } catch (error) {
-    const url = new URL("/dashboard", request.url);
+    const url = new URL("/vault", request.url);
     url.searchParams.set("github_error", error instanceof Error ? error.message : "GitHub App install URL failed");
     return Response.redirect(url, 303);
   }

@@ -13,8 +13,21 @@ function wantsJson(request: Request) {
   return contentType.includes("application/json") || accept.includes("application/json");
 }
 
-function siteRedirect(request: Request, siteId: string, params: Record<string, string> = {}) {
-  const url = new URL(`/dashboard/sites/${encodeURIComponent(siteId)}`, request.url);
+function safeRedirectPath(path: string | undefined, siteId: string) {
+  if (!path || !path.startsWith("/dashboard")) {
+    return `/dashboard/sites/${encodeURIComponent(siteId)}`;
+  }
+
+  return path;
+}
+
+function siteRedirect(
+  request: Request,
+  siteId: string,
+  params: Record<string, string> = {},
+  redirectTo?: string,
+) {
+  const url = new URL(safeRedirectPath(redirectTo, siteId), request.url);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -29,6 +42,7 @@ async function readPayload(request: Request) {
     return {
       intent: String(body.intent ?? "rotate"),
       siteId: String(body.site_id ?? body.siteId ?? ""),
+      redirectTo: body.redirect_to ? String(body.redirect_to) : undefined,
     };
   }
 
@@ -36,6 +50,7 @@ async function readPayload(request: Request) {
   return {
     intent: String(form.get("intent") ?? "rotate"),
     siteId: String(form.get("site_id") ?? ""),
+    redirectTo: form.get("redirect_to") ? String(form.get("redirect_to")) : undefined,
   };
 }
 
@@ -59,7 +74,7 @@ export async function POST(request: Request) {
         return Response.json({ site_id: payload.siteId, revoked: true });
       }
 
-      return siteRedirect(request, payload.siteId, { token_revoked: "1" });
+      return siteRedirect(request, payload.siteId, { token_revoked: "1" }, payload.redirectTo);
     }
 
     const token = `lnit_${randomToken(32)}`;
@@ -78,12 +93,12 @@ export async function POST(request: Request) {
       });
     }
 
-    return siteRedirect(request, site.id, { token_rotated: "1" });
+    return siteRedirect(request, site.id, { token_rotated: "1" }, payload.redirectTo);
   } catch {
     if (json) {
       return Response.json({ error: "site token update failed" }, { status: 404 });
     }
 
-    return siteRedirect(request, payload.siteId, { token_error: "1" });
+    return siteRedirect(request, payload.siteId, { token_error: "1" }, payload.redirectTo);
   }
 }

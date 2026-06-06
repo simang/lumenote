@@ -11,13 +11,13 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state") ?? "";
 
   if (!installationId) {
-    const redirectUrl = new URL("/dashboard", request.url);
+    const redirectUrl = new URL("/vault", request.url);
     redirectUrl.searchParams.set("github_error", "missing installation_id");
     return Response.redirect(redirectUrl, 303);
   }
 
   if (!(await verifyGitHubInstallState(state))) {
-    const redirectUrl = new URL("/dashboard", request.url);
+    const redirectUrl = new URL("/vault", request.url);
     redirectUrl.searchParams.set("github_error", "invalid state");
     return Response.redirect(redirectUrl, 303);
   }
@@ -32,11 +32,11 @@ export async function GET(request: Request) {
       repositorySelection: account.repositorySelection,
     });
 
-    const redirectUrl = new URL("/dashboard", request.url);
+    const redirectUrl = new URL("/vault", request.url);
     redirectUrl.searchParams.set("installation_id", installationId);
     return Response.redirect(redirectUrl, 303);
   } catch (error) {
-    const redirectUrl = new URL("/dashboard", request.url);
+    const redirectUrl = new URL("/vault", request.url);
     redirectUrl.searchParams.set("github_error", error instanceof Error ? error.message : "installation failed");
     return Response.redirect(redirectUrl, 303);
   }

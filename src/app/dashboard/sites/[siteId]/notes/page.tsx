@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { appUrlFromRequest } from "@/lib/config";
 import {
   findOwnerNoteForSiteForUser,
-  findSiteForUser,
+  findSiteWithIngestTokenForUser,
   listOwnerBacklinksForNoteForUser,
   listOwnerNotesForSiteForUser,
   listOwnerOutgoingLinksForNoteForUser,
+  listRecentIngestJobsForSiteForUser,
+  listSitesForUser,
 } from "@/lib/repositories";
 import {
   displayPropertiesForEntry,
@@ -31,8 +34,15 @@ export const dynamic = "force-dynamic";
 
 type NotesSearchParams = {
   filter?: string;
+  job_empty?: string;
+  job_existing?: string;
+  job_processed?: string;
+  job_queued?: string;
   note?: string;
   q?: string;
+  token_error?: string;
+  token_revoked?: string;
+  token_rotated?: string;
   type?: string;
   view?: string;
 };
@@ -387,6 +397,212 @@ function OwnerPropertiesPanel({
   );
 }
 
+type VaultToolbarProps = {
+  site: NonNullable<Awaited<ReturnType<typeof findSiteWithIngestTokenForUser>>>;
+  sites: Awaited<ReturnType<typeof listSitesForUser>>;
+  currentPath: string;
+  appUrl: string;
+  activeJob: Awaited<ReturnType<typeof listRecentIngestJobsForSiteForUser>>[number] | null;
+};
+
+function VaultStatusNotices({ query }: { query: NotesSearchParams }) {
+  return (
+    <>
+      {query.job_queued ? (
+        <section className="card stack compact">
+          <p className="muted">Full sync job queued: {query.job_queued}</p>
+        </section>
+      ) : null}
+      {query.job_existing ? (
+        <section className="card stack compact">
+          <p className="muted">A full sync job is already active: {query.job_existing}</p>
+        </section>
+      ) : null}
+      {query.job_processed ? (
+        <section className="card stack compact">
+          <p className="muted">Ingest job processed: {query.job_processed}</p>
+        </section>
+      ) : null}
+      {query.job_empty ? (
+        <section className="card stack compact">
+          <p className="muted">No queued ingest jobs for this site.</p>
+        </section>
+      ) : null}
+      {query.token_rotated ? (
+        <section className="card stack compact">
+          <p className="muted">Agent ingest token is ready. Copy it before rotating again.</p>
+        </section>
+      ) : null}
+      {query.token_revoked ? (
+        <section className="card stack compact">
+          <p className="muted">Agent ingest token revoked.</p>
+        </section>
+      ) : null}
+      {query.token_error ? (
+        <section className="card stack compact">
+          <p className="danger">Agent token action failed.</p>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function VaultToolbar({ site, sites, currentPath, appUrl, activeJob }: VaultToolbarProps) {
+  const agentEnv = site.ingest_token
+    ? [
+        `export LUMENOTE_API_URL="${appUrl}"`,
+        `export LUMENOTE_SITE_ID="${site.id}"`,
+        `export LUMENOTE_SITE_TOKEN="${site.ingest_token}"`,
+      ].join("\n")
+    : "";
+
+  return (
+    <section className="vault-toolbar">
+      <div className="vault-toolbar-title">
+        <strong>{site.name}</strong>
+        <span className="muted">
+          {site.owner}/{site.repo}@{site.branch}
+        </span>
+      </div>
+
+      <div className="vault-toolbar-actions">
+        <details className="vault-toolbar-menu">
+          <summary>Sites</summary>
+          <div className="vault-menu-panel">
+            {sites.map((candidate) => (
+              <Link
+                className={candidate.id === site.id ? "vault-menu-item active" : "vault-menu-item"}
+                href={`/dashboard/sites/${candidate.id}/notes`}
+                key={candidate.id}
+              >
+                <span>{candidate.name}</span>
+                <span className="muted">
+                  {candidate.owner}/{candidate.repo}
+                </span>
+              </Link>
+            ))}
+            <Link className="vault-menu-item" href="/vault?setup=1">
+              <span>Connect another vault</span>
+              <span className="muted">GitHub App setup</span>
+            </Link>
+          </div>
+        </details>
+
+        <form action="/api/ingest/full-sync" method="post">
+          <input name="site_id" type="hidden" value={site.id} />
+          <input name="ref" type="hidden" value={site.branch} />
+          <input name="redirect_to" type="hidden" value={currentPath} />
+          <button className="secondary" type="submit">
+            Queue sync
+          </button>
+        </form>
+        <form action="/api/ingest/jobs/run" method="post">
+          <input name="site_id" type="hidden" value={site.id} />
+          <input name="redirect_to" type="hidden" value={currentPath} />
+          <button className="secondary" type="submit">
+            Run sync
+          </button>
+        </form>
+
+        <Link className="button secondary" href={`/p/${site.slug}`}>
+          Public
+        </Link>
+
+        <details className="vault-toolbar-menu vault-settings-menu">
+          <summary>Settings</summary>
+          <div className="vault-menu-panel vault-settings-panel">
+            <section className="stack compact">
+              <h2>Site settings</h2>
+              <form action="/api/sites" method="post">
+                <input name="id" type="hidden" value={site.id} />
+                <input name="redirect_to" type="hidden" value={currentPath} />
+                <label>
+                  Site slug
+                  <input name="slug" defaultValue={site.slug} required />
+                </label>
+                <label>
+                  Name
+                  <input name="name" defaultValue={site.name} required />
+                </label>
+                <label>
+                  GitHub owner
+                  <input name="owner" defaultValue={site.owner} required />
+                </label>
+                <label>
+                  GitHub repo
+                  <input name="repo" defaultValue={site.repo} required />
+                </label>
+                <label>
+                  Branch
+                  <input name="branch" defaultValue={site.branch} required />
+                </label>
+                <label>
+                  GitHub installation id
+                  <input name="github_installation_id" defaultValue={site.github_installation_id} required />
+                </label>
+                <button type="submit">Save settings</button>
+              </form>
+            </section>
+
+            <section className="stack compact">
+              <h2>Agent ingest</h2>
+              {site.ingest_token ? (
+                <>
+                  <textarea aria-label="Agent environment variables" readOnly rows={4} value={agentEnv} />
+                  <p className="muted">Active token: ****{site.ingest_token_last_four}</p>
+                </>
+              ) : site.ingest_token_hash ? (
+                <p className="muted">
+                  This site has an ingest token, but it cannot be decrypted with the current environment.
+                  Rotate it to copy a fresh token.
+                </p>
+              ) : (
+                <p className="muted">No site-specific ingest token has been issued.</p>
+              )}
+              <div className="row compact-row">
+                <form action="/api/sites/ingest-token" method="post">
+                  <input name="intent" type="hidden" value="rotate" />
+                  <input name="site_id" type="hidden" value={site.id} />
+                  <input name="redirect_to" type="hidden" value={currentPath} />
+                  <button className="secondary" type="submit">
+                    {site.ingest_token_hash ? "Rotate token" : "Generate token"}
+                  </button>
+                </form>
+                <form action="/api/sites/ingest-token" method="post">
+                  <input name="intent" type="hidden" value="revoke" />
+                  <input name="site_id" type="hidden" value={site.id} />
+                  <input name="redirect_to" type="hidden" value={currentPath} />
+                  <button className="secondary danger-button" disabled={!site.ingest_token_hash} type="submit">
+                    Revoke token
+                  </button>
+                </form>
+              </div>
+            </section>
+
+            <section className="stack compact">
+              <h2>Sync status</h2>
+              {activeJob ? (
+                <p className="muted">
+                  Active job: {activeJob.id} · {activeJob.status}
+                </p>
+              ) : (
+                <p className="muted">No active full sync job.</p>
+              )}
+              <Link href={`/dashboard/sites/${site.id}`}>Open legacy settings page</Link>
+            </section>
+          </div>
+        </details>
+
+        <form action="/api/auth/logout" method="post">
+          <button className="secondary" type="submit">
+            Logout
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
 export default async function OwnerVaultNotesPage({
   params,
   searchParams,
@@ -397,15 +613,17 @@ export default async function OwnerVaultNotesPage({
   const user = await requireUser();
   const { siteId } = await params;
   const query = await searchParams;
-  const site = await findSiteForUser(user.id, siteId);
+  const site = await findSiteWithIngestTokenForUser(user.id, siteId);
 
   if (!site) {
     notFound();
   }
 
-  const [noteRows, loadedViews] = await Promise.all([
+  const [noteRows, loadedViews, sites, jobs] = await Promise.all([
     listOwnerNotesForSiteForUser(user.id, site.id),
     loadTolariaViews(site),
+    listSitesForUser(user.id),
+    listRecentIngestJobsForSiteForUser(user.id, site.id, 10),
   ]);
   const entries = toOwnerVaultEntries(noteRows);
   const definitions = typeDefinitions(entries);
@@ -437,28 +655,20 @@ export default async function OwnerVaultNotesPage({
   const inboxCount = countEntries(entries, "inbox");
   const favoritesCount = countEntries(entries, "favorites");
   const archivedCount = countEntries(entries, "archived");
+  const currentPath = notesPath(site.id, selection, selectedId ?? undefined, query.q);
+  const activeJob = jobs.find((job) => job.status === "queued" || job.status === "running") ?? null;
+  const appUrl = appUrlFromRequest();
 
   return (
     <main className="vault-main stack">
-      <section className="row">
-        <div>
-          <Link href={`/dashboard/sites/${site.id}`}>← Site settings</Link>
-          <h1>{site.name}</h1>
-          <p className="muted">
-            Owner vault reader · {site.owner}/{site.repo}@{site.branch}
-          </p>
-        </div>
-        <div className="row compact-row">
-          <Link className="button secondary" href={`/p/${site.slug}`}>
-            Public root
-          </Link>
-          <form action="/api/auth/logout" method="post">
-            <button className="secondary" type="submit">
-              Logout
-            </button>
-          </form>
-        </div>
-      </section>
+      <VaultToolbar
+        site={site}
+        sites={sites}
+        currentPath={currentPath}
+        appUrl={appUrl}
+        activeJob={activeJob}
+      />
+      <VaultStatusNotices query={query} />
 
       {loadedViews.error ? (
         <section className="card stack compact">

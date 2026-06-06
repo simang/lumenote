@@ -15,5 +15,5 @@ export async function POST(request: Request) {
 
   await claimOrphanSitesForUser(user.id);
   await createUserSession(user);
-  return Response.redirect(new URL("/dashboard", request.url), 303);
+  return Response.redirect(new URL("/vault", request.url), 303);
 }

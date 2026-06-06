@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const user = await createPasswordUser(email, password);
     await createUserSession(user);
-    return Response.redirect(new URL("/dashboard", request.url), 303);
+    return Response.redirect(new URL("/vault", request.url), 303);
   } catch {
     return Response.redirect(new URL("/signup?error=1", request.url), 303);
   }

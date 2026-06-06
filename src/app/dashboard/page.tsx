@@ -87,11 +87,16 @@ export default async function DashboardPage({
           <h1>Dashboard</h1>
           <p className="muted">Signed in as {user.email}</p>
         </div>
-        <form action="/api/auth/logout" method="post">
-          <button className="secondary" type="submit">
-            Logout
-          </button>
-        </form>
+        <div className="row compact-row">
+          <Link className="button secondary" href="/vault">
+            Open vault
+          </Link>
+          <form action="/api/auth/logout" method="post">
+            <button className="secondary" type="submit">
+              Logout
+            </button>
+          </form>
+        </div>
       </section>
 
       {params.github_error ? (

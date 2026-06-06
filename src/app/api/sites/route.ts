@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       return Response.redirect(new URL(redirectTo, request.url), 303);
     }
 
-    return Response.redirect(new URL(`/dashboard/sites/${site.id}`, request.url), 303);
+    return Response.redirect(new URL(`/dashboard/sites/${site.id}/notes`, request.url), 303);
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "23505") {
       return Response.json({ error: `site slug is already taken: ${siteSlug}` }, { status: 409 });
@@ -95,5 +95,5 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  return Response.redirect(new URL("/dashboard", request.url), 303);
+  return Response.redirect(new URL("/vault", request.url), 303);
 }
