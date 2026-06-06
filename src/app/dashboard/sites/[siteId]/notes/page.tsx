@@ -152,6 +152,241 @@ function typeDotStyle(definition: OwnerVaultEntry | null) {
   };
 }
 
+function humanizePropertyKey(key: string) {
+  return key
+    .replace(/^_+/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatPropertyValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatPropertyValue).join(", ") : "—";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function formatShortSha(value: string) {
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+function targetStem(value: string) {
+  return value
+    .split("#")[0]
+    .replace(/^\[\[/, "")
+    .replace(/]]$/, "")
+    .replace(/\.md$/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+function filenameStem(path: string) {
+  return path.split("/").pop()?.replace(/\.md$/i, "").toLowerCase() ?? "";
+}
+
+function findEntryForRelationshipTarget(entries: OwnerVaultEntry[], target: string) {
+  const normalized = targetStem(target);
+  if (!normalized) {
+    return null;
+  }
+
+  return entries.find((entry) => {
+    const pathWithoutExtension = entry.path.replace(/\.md$/i, "").toLowerCase();
+    return (
+      entry.title.toLowerCase() === normalized ||
+      entry.slug.toLowerCase() === normalized ||
+      pathWithoutExtension === normalized ||
+      filenameStem(entry.path) === normalized
+    );
+  }) ?? null;
+}
+
+function InspectorRow({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="vault-inspector-row">
+      <dt>{label}</dt>
+      <dd>{formatPropertyValue(value)}</dd>
+    </div>
+  );
+}
+
+function InspectorLinkList({
+  entries,
+  siteId,
+}: {
+  entries: Array<{ id: string; title: string; path: string }>;
+  siteId: string;
+}) {
+  if (entries.length === 0) {
+    return <p className="muted vault-inspector-empty">None</p>;
+  }
+
+  return (
+    <ul className="vault-inspector-link-list">
+      {entries.map((entry) => (
+        <li key={entry.id}>
+          <Link href={notesPath(siteId, { kind: "filter", filter: "all" }, entry.id)}>
+            {entry.title}
+          </Link>
+          <span className="muted">{entry.path}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OwnerPropertiesPanel({
+  siteId,
+  selectedEntry,
+  selectedNote,
+  entries,
+  outgoingLinks,
+  backlinks,
+}: {
+  siteId: string;
+  selectedEntry: OwnerVaultEntry;
+  selectedNote: NonNullable<Awaited<ReturnType<typeof findOwnerNoteForSiteForUser>>>;
+  entries: OwnerVaultEntry[];
+  outgoingLinks: Array<{ id: string; title: string; path: string }>;
+  backlinks: Array<{ id: string; title: string; path: string }>;
+}) {
+  const customProperties = Object.entries(selectedEntry.properties).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const relationships = Object.entries(selectedEntry.relationships).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const rawFrontmatter = Object.entries(selectedNote.frontmatter ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+
+  return (
+    <details className="vault-properties-panel">
+      <summary>
+        <span>Properties</span>
+        <span className="muted">
+          {selectedEntry.noteType}
+          {selectedEntry.status ? ` · ${selectedEntry.status}` : ""}
+        </span>
+      </summary>
+      <div className="vault-inspector-body">
+        <section className="vault-inspector-section">
+          <h2>Note</h2>
+          <dl>
+            <InspectorRow label="Type" value={selectedEntry.noteType} />
+            <InspectorRow label="Status" value={selectedEntry.status} />
+            <InspectorRow label="Visibility" value={selectedEntry.visibility} />
+            <InspectorRow label="Publish" value={selectedEntry.publish} />
+            <InspectorRow label="Favorite" value={selectedEntry.favorite} />
+            <InspectorRow label="Organized" value={selectedEntry.organized} />
+          </dl>
+        </section>
+
+        <section className="vault-inspector-section">
+          <h2>Properties</h2>
+          {customProperties.length === 0 ? (
+            <p className="muted vault-inspector-empty">No custom properties.</p>
+          ) : (
+            <dl>
+              {customProperties.map(([key, value]) => (
+                <InspectorRow key={key} label={humanizePropertyKey(key)} value={value} />
+              ))}
+            </dl>
+          )}
+        </section>
+
+        <section className="vault-inspector-section">
+          <h2>Relationships</h2>
+          {relationships.length === 0 ? (
+            <p className="muted vault-inspector-empty">No relationship properties.</p>
+          ) : (
+            <div className="vault-relationship-list">
+              {relationships.map(([key, targets]) => (
+                <div className="vault-relationship-group" key={key}>
+                  <h3>{humanizePropertyKey(key)}</h3>
+                  <ul>
+                    {targets.map((target) => {
+                      const targetEntry = findEntryForRelationshipTarget(entries, target);
+
+                      return (
+                        <li key={target}>
+                          {targetEntry ? (
+                            <Link href={notesPath(siteId, { kind: "filter", filter: "all" }, targetEntry.id)}>
+                              {targetEntry.title}
+                            </Link>
+                          ) : (
+                            <span>{target}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="vault-inspector-section">
+          <h2>Links</h2>
+          <div className="vault-inspector-columns">
+            <div>
+              <h3>Outgoing</h3>
+              <InspectorLinkList entries={outgoingLinks} siteId={siteId} />
+            </div>
+            <div>
+              <h3>Backlinks</h3>
+              <InspectorLinkList entries={backlinks} siteId={siteId} />
+            </div>
+          </div>
+        </section>
+
+        <section className="vault-inspector-section">
+          <h2>File info</h2>
+          <dl>
+            <InspectorRow label="Path" value={selectedEntry.path} />
+            <InspectorRow label="Slug" value={selectedEntry.slug} />
+            <InspectorRow label="Updated" value={selectedEntry.updatedAt} />
+            <InspectorRow label="Created" value={selectedEntry.createdAt} />
+            <InspectorRow label="Source SHA" value={formatShortSha(selectedNote.source_sha)} />
+            <InspectorRow label="Body Hash" value={formatShortSha(selectedNote.body_hash)} />
+          </dl>
+        </section>
+
+        <details className="vault-raw-frontmatter">
+          <summary>Raw frontmatter</summary>
+          {rawFrontmatter.length === 0 ? (
+            <p className="muted vault-inspector-empty">No frontmatter.</p>
+          ) : (
+            <dl>
+              {rawFrontmatter.map(([key, value]) => (
+                <InspectorRow key={key} label={key} value={value} />
+              ))}
+            </dl>
+          )}
+        </details>
+      </div>
+    </details>
+  );
+}
+
 export default async function OwnerVaultNotesPage({
   params,
   searchParams,
@@ -395,6 +630,14 @@ export default async function OwnerVaultNotesPage({
                 <p className="muted">{selectedNote.path}</p>
                 {selectedNote.parse_error ? <p className="danger">Parse error: {selectedNote.parse_error}</p> : null}
               </header>
+              <OwnerPropertiesPanel
+                siteId={site.id}
+                selectedEntry={selectedEntry}
+                selectedNote={selectedNote}
+                entries={entries}
+                outgoingLinks={outgoingLinks}
+                backlinks={backlinks}
+              />
               <section dangerouslySetInnerHTML={{ __html: ownerHtml }} />
               <footer className="note-links">
                 {outgoingLinks.length > 0 ? (

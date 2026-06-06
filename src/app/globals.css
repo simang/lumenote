@@ -525,6 +525,149 @@ details[open] summary {
   margin: 20px;
 }
 
+.vault-properties-panel {
+  background: #fbfaf7;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin: 24px 0;
+  overflow: hidden;
+}
+
+.vault-properties-panel > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  font-weight: 800;
+  gap: 12px;
+  justify-content: space-between;
+  list-style-position: inside;
+  padding: 14px 16px;
+}
+
+.vault-properties-panel[open] > summary {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.vault-inspector-body {
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.vault-inspector-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vault-inspector-section h2,
+.vault-raw-frontmatter > summary {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.vault-inspector-section h3 {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.vault-inspector-section dl,
+.vault-raw-frontmatter dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.vault-inspector-row {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(110px, 0.42fr) minmax(0, 1fr);
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+.vault-inspector-row dt {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-inspector-row dd {
+  font-size: 12px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.vault-inspector-empty {
+  font-size: 12px;
+  margin: 0;
+}
+
+.vault-inspector-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vault-inspector-link-list,
+.vault-relationship-list ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vault-inspector-link-list li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vault-inspector-link-list li span,
+.vault-relationship-list li {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.vault-relationship-list {
+  display: grid;
+  gap: 12px;
+}
+
+.vault-relationship-group {
+  display: grid;
+  gap: 6px;
+}
+
+.vault-raw-frontmatter {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.vault-raw-frontmatter > summary {
+  cursor: pointer;
+}
+
+.vault-raw-frontmatter[open] > summary {
+  margin-bottom: 0;
+}
+
 @media (max-width: 1100px) {
   .vault-reader {
     grid-template-columns: 220px minmax(260px, 340px) minmax(0, 1fr);
@@ -545,5 +688,9 @@ details[open] summary {
 
   .vault-content article {
     margin: 12px;
+  }
+
+  .vault-inspector-columns {
+    grid-template-columns: 1fr;
   }
 }
