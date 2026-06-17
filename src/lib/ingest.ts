@@ -138,20 +138,32 @@ function applyPendingResolverNotes(existing: ResolverNote[], pending: ParsedPend
   const byPath = new Map(existing.map((note) => [note.path, note]));
 
   for (const item of pending) {
+    const error = item.conflictError ?? item.parseError;
     const current = byPath.get(item.draft.path);
     byPath.set(item.draft.path, {
       id: current?.id ?? newId("note"),
       path: item.draft.path,
       title: item.draft.title,
       slug: item.draft.slug,
-      publish: item.draft.publish && !item.conflictError && !item.parseError,
+      publish: shouldPublishNote(item.draft, error),
       visibility: item.draft.visibility,
       deleted_at: null,
-      parse_error: item.conflictError ?? item.parseError,
+      parse_error: error,
     });
   }
 
   return [...byPath.values()];
+}
+
+export function shouldPublishNote(
+  draft: Pick<ParsedNoteDraft, "publish" | "visibility">,
+  error?: string | null,
+) {
+  return draft.publish && !error && draft.visibility !== "private";
+}
+
+export function shouldStoreRenderedHtml(error?: string | null) {
+  return !error;
 }
 
 function buildNoteResolver(site: Site, notes: ResolverNote[], currentNotePath: string) {
@@ -269,7 +281,7 @@ async function detectConflicts(siteId: string, pending: ParsedPendingNote[]) {
   const slugCounts = new Map<string, string[]>();
 
   for (const item of pending) {
-    if (!item.draft.publish || item.parseError) {
+    if (!shouldPublishNote(item.draft, item.parseError)) {
       continue;
     }
 
@@ -279,7 +291,7 @@ async function detectConflicts(siteId: string, pending: ParsedPendingNote[]) {
   }
 
   for (const item of pending) {
-    if (!item.draft.publish || item.parseError) {
+    if (!shouldPublishNote(item.draft, item.parseError)) {
       continue;
     }
 
@@ -397,13 +409,13 @@ async function processChanges(options: {
 
   for (const item of pendingNotes) {
     const error = item.parseError ?? item.conflictError;
-    const shouldPublish = item.draft.publish && !error && item.draft.visibility !== "private";
+    const shouldPublish = shouldPublishNote(item.draft, error);
 
     if (error) {
       summary.errors.push({ path: item.draft.path, message: error });
     }
 
-    if (!shouldPublish) {
+    if (!shouldStoreRenderedHtml(error)) {
       const noteId = await upsertNote(client, {
         siteId: site.id,
         path: item.draft.path,
@@ -436,7 +448,7 @@ async function processChanges(options: {
       slug: item.draft.slug,
       title: item.draft.title,
       description: item.draft.description,
-      publish: true,
+      publish: shouldPublish,
       visibility: item.draft.visibility,
       frontmatter: item.draft.frontmatter,
       lumenote: item.draft.lumenote,
@@ -445,7 +457,11 @@ async function processChanges(options: {
       parseError: null,
     });
     await replaceNoteLinks(client, noteId, rendered.outgoingLinks);
-    summary.notesPublished += 1;
+    if (shouldPublish) {
+      summary.notesPublished += 1;
+    } else {
+      summary.notesUnpublished += 1;
+    }
   }
 }
 
